@@ -4,14 +4,16 @@ meta:
   endian: le
   
 seq:
-  - id: file
-    type: main
-  - id: file2
-    type: main
-  #- id: header2
-  #  type: main
-  #- id: header3
+  #- id: frame_test
   #  type: submodel
+  - id: header
+    type: header
+    
+  - id: submodel
+    type: submodel
+    #if: header.unknown12 != 0
+    repeat: expr
+    repeat-expr: 6 #header.unknown12
   
   #- id: mesh_thing_count
   #  type: u2le
@@ -28,21 +30,13 @@ seq:
     
     
 types:
-  main:
-    seq:
-      - id: header
-        type: header
-        
-      - id: submodel
-        type: submodel
-        if: header.unknown12 != 0
-        #repeat: expr
-        #repeat-expr: header.unknown12
 
   header:
     seq:
-      - id: magic #Err, probably not?
-        type: u2le
+      - id: type
+        type: u1
+      - id: count
+        type: u1
       - id: unknown1
         type: f4le
       - id: unknown2
@@ -208,43 +202,34 @@ types:
   unknown_type:
     seq:
       - id: unknown1
-        size: 30
+        size: 32
         
       - id: count
         type: u4le
+        
+      - id: unknown2
+        size: 12
         
       - id: unknown_block1
         type: unknown_type2
         repeat: expr
         repeat-expr: count
         
-      - id: count2
-        type: u4le
+      #- id: count2
+      #  type: u4le
         
       - id: unknown_block2
         type: unknown_type3
         repeat: expr
-        repeat-expr: count2
+        repeat-expr: count
         
-      - id: count3
-        type: u4le
+      #- id: count3
+      #  type: u4le
         
       - id: unknown_block3
         type: unknown_type2
         repeat: expr
-        repeat-expr: count3
-        
-      - id: unknown2
-        type: u4le
-        
-      - id: count4
-        type: u2le
-        
-      - id: extra_model #Probably not the correct way to do it
-        type: submodel
-        if: count4 > 0
-        #repeat: expr
-        #repeat-expr: count4
+        repeat-expr: count
         
   submodel:
     seq:
@@ -274,11 +259,21 @@ types:
       
       - id: unknown1
         type: u1
-      
-      - id: unknown2
-        type: u2le
         
       - id: unknown_block1
         type: unknown_type
         if: unknown1 == 1
+        
+      - id: padding
+        size: 48
+        if: mesh_count == 0 and unknown1 == 0
+        
+      - id: count4
+        type: u2le
+        
+      - id: extra_model #Probably not the correct way to do it
+        type: submodel
+        if: count4 > 0
+        #repeat: expr
+        #repeat-expr: count4
         
