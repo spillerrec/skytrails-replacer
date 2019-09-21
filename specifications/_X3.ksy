@@ -4,24 +4,14 @@ meta:
   endian: le
   
 seq:
-  #- id: frame_test
-  #  type: submodel
   - id: header
     type: header
     
   - id: submodel
     type: submodel
-    #if: header.unknown12 != 0
     repeat: expr
-    repeat-expr: 6 #header.unknown12
-  
-  #- id: mesh_thing_count
-  #  type: u2le
+    repeat-expr: header.unknown12
     
-  #- id: mesh_thing
-  #  type: mesh
-  #  repeat: expr
-  #  repeat-expr: 1000
   
   - id: file_end_test
     type: f4le
@@ -30,7 +20,82 @@ seq:
     
     
 types:
-
+  bone:
+    seq:
+      - id: name
+        type: str
+        size: 260
+        encoding: UTF-8
+        
+      - id: matrix
+        type: f4le
+        repeat: expr
+        repeat-expr: 16
+        
+      - id: unknown1
+        type: u4le
+        
+      - id: unknown2
+        type: u1
+        
+      - id: unknown3
+        type: u4le
+        repeat: expr
+        repeat-expr: 8
+        
+      - id: count1
+        type: u4le
+        
+      - id: block1
+        type: bone_type1
+        repeat: expr
+        repeat-expr: count1
+        
+      - id: count2
+        type: u4le
+        
+      - id: block2
+        type: bone_type2
+        repeat: expr
+        repeat-expr: count2
+        
+      - id: count3
+        type: u4le
+        
+      - id: block3
+        type: bone_type1
+        repeat: expr
+        repeat-expr: count1
+        
+      - id: unknown4
+        type: u4le
+        
+      - id: unknown5
+        type: u2le
+        
+  bone_type1:
+    seq:
+      - id: unknown1
+        type: u4le
+      - id: unknown2
+        type: f4le
+      - id: unknown3
+        type: f4le
+      - id: unknown4
+        type: f4le
+        
+  bone_type2:
+    seq:
+      - id: unknown1
+        type: u4le
+      - id: unknown2
+        type: f4le
+      - id: unknown3
+        type: f4le
+      - id: unknown4
+        type: f4le
+      - id: unknown5
+        type: f4le
   header:
     seq:
       - id: type
@@ -61,13 +126,6 @@ types:
         type: f4le
       - id: unknown12
         type: u2le
-
-  matrix:
-    seq:
-      - id: values
-        type: f4le
-        repeat: expr
-        repeat-expr: 16
         
   texture:
     seq:
@@ -118,6 +176,18 @@ types:
       - id: v
         type: f4le
         
+  vertex2:
+    seq:
+      - id: base
+        type: vertex
+        
+      - id: unknown1
+        type: f4le
+        
+      - id: unknown2
+        type: f4le
+    
+        
   mesh:
     seq:
       - id: name
@@ -128,7 +198,7 @@ types:
       - id: unknown1
         type: u4le
         
-      - id: unknown2
+      - id: vertice_size
         type: u4le
         
       - id: texture_ref_count
@@ -142,8 +212,15 @@ types:
       - id: vertices_count
         type: u4le
         
-      - id: vertices
+      - id: vertices40
         type: vertex
+        if: vertice_size == 40
+        repeat: expr
+        repeat-expr: vertices_count
+        
+      - id: vertices48
+        type: vertex2
+        if: vertice_size == 48
         repeat: expr
         repeat-expr: vertices_count
         
@@ -155,18 +232,35 @@ types:
         repeat: expr
         repeat-expr: edge_count
         
+      - id: unknown2
+        type: f4le
       - id: unknown3
         type: f4le
-        repeat: expr
-        repeat-expr: 10
-        
       - id: unknown4
-        type: u4le
+        type: f4le
         
-      - id: block
-        size: 104
+      - id: unknown5
+        type: f4le
         repeat: expr
-        repeat-expr: unknown4
+        repeat-expr: 6
+        
+      - id: unknown6
+        type: f4le
+        
+      - id: unknown7
+        type: f4le
+       
+      # This doesn't seem to be correct 
+      #- id: block
+      #  size: 104
+      #  repeat: expr
+      #  repeat-expr: unknown6
+  unknown_type_test:
+    seq:
+      - id: unknown1
+        type: f4le
+        repeat: expr
+        repeat-expr: 26
         
   unknown_type2:
     seq:
@@ -233,13 +327,19 @@ types:
         
   submodel:
     seq:
+      - id: skipper
+        type: u1
+        repeat: until
+        repeat-until: _ == 70
       - id: name
         type: str
-        size: 260
+        size: 259
         encoding: UTF-8
         
       - id: matrix
-        type: matrix
+        type: f4le
+        repeat: expr
+        repeat-expr: 16
         
       - id: texture_count
         type: u2le
@@ -271,9 +371,8 @@ types:
       - id: count4
         type: u2le
         
-      - id: extra_model #Probably not the correct way to do it
+      - id: children
         type: submodel
-        if: count4 > 0
-        #repeat: expr
-        #repeat-expr: count4
+        repeat: expr
+        repeat-expr: count4
         
