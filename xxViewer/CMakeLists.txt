@@ -16,7 +16,6 @@ set(SOURCE_UTILS
 	utils/ArrayView.cpp
 	utils/File.cpp
 	utils/StringView.cpp
-	nv_dds/nv_dds.cpp
 	)
 
 
@@ -25,7 +24,7 @@ add_executable(trailsViewer ${SOURCE_CORE} ${SOURCE_UTILS})
 
 # Set-up libraries
 
-target_link_libraries(trailsViewer -lopengl32 -lglfw3 -lglew32)
+target_link_libraries(trailsViewer -lopengl32 -lglfw3 -lglew32 -lpng)
 
 # Enable C++14 features
 set_property(TARGET trailsViewer PROPERTY CXX_STANDARD 14)

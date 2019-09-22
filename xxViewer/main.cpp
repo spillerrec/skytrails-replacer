@@ -11,14 +11,15 @@ using namespace glm;
 
 #include "utils/File.hpp"
 #include "utils/ByteViewReader.hpp"
-#include "nv_dds/nv_dds.h"
+
+#include <png++/png.hpp>
 
 #include <string>
 #include <iostream>
 #include <fstream>
 #include <vector>
 
-const std::string app_path = "../";
+const std::string app_path = "F:/Projects/skytrails-replacer/xxViewer/";
 
 GLuint LoadShaders(const char * vertex_file_path,const char * fragment_file_path){
 
@@ -309,7 +310,6 @@ class TextureHandler{
 	public:	
 		struct Texture{
 			std::string filename;
-			nv_dds::CDDSImage image;
 			GLuint id;
 		};
 		std::vector<Texture> textures;
@@ -324,22 +324,34 @@ class TextureHandler{
 			
 			for( auto& tex : textures ){
 			//	auto &tex = textures[0];
-				auto path = app_path + "debug/images/" + tex.filename;
-				path = path.substr(0, path.size()-4) + ".dds";
-				tex.image.load( path.c_str() );
+				auto path = app_path + "debug/images-png/" + tex.filename;
+				path = path.substr(0, path.size()-4) + ".png";
+				png::image< png::rgba_pixel > image(path);
 				
+				auto buffer = std::make_unique<uint8_t[]>(image.get_height()*image.get_width()*4);
+				for (png::uint_32 y = 0; y < image.get_height(); ++y)
+					for (png::uint_32 x = 0; x < image.get_width(); ++x)
+					{
+						auto pix = image[y][x];
+						auto out = buffer.get() + 4*(x + y*image.get_width());
+						if(pix.red == 255 && pix.green==0 && pix.blue==0)
+							pix.red = pix.alpha = 0;
+						out[0] = pix.red;
+						out[1] = pix.green;
+						out[2] = pix.blue;
+						out[3] = pix.alpha;
+					}
+
 				tex.id = -1;
 				glGenTextures( 1, &tex.id );
 				glBindTexture( GL_TEXTURE_2D, tex.id );
 				
-	// When MAGnifying the image (no bigger mipmap available), use LINEAR filtering
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	// When MINifying the image, use a LINEAR blend of two mipmaps, each filtered LINEARLY too
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-	// Generate mipmaps, by the way.
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 				
-				tex.image.upload_texture2D();
-	glGenerateMipmap(GL_TEXTURE_2D);
+				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.get_width(), image.get_height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.get());
+				
+				glGenerateMipmap(GL_TEXTURE_2D);
 			}
 		}
 		
@@ -551,7 +563,7 @@ int main( int argc, char* argv[] ){
 	} 
 	
 	glfwWindowHint(GLFW_SAMPLES, 4); // 4x antialiasing
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4); // We want OpenGL 3.3
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4); // OpenGl 4.3 needed for debug context
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // To make MacOS happy; should not be needed
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); //We don't want the old OpenGL 
@@ -561,7 +573,7 @@ int main( int argc, char* argv[] ){
 	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
 	// Open a window and create its OpenGL context
 	GLFWwindow* window; // (In the accompanying source code, this variable is global)
-	window = glfwCreateWindow( window_width, window_height, "Tutorial 01", NULL, NULL);
+	window = glfwCreateWindow( window_width, window_height, "TrailsViewer", NULL, NULL);
 	if( window == NULL ){
 		fprintf( stderr, "Failed to open GLFW window. If you have an Intel GPU, they are not 3.3 compatible. Try the 2.1 version of the tutorials.\n" );
 		glfwTerminate();
