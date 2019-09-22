@@ -121,10 +121,10 @@ namespace Falcom{
 		uint8_t unknown2[524];
 	};
 	struct TexRef{
-		uint32_t unknown01; //mtlstart //Face start
-		uint32_t unknown02; //mtlindex //Face amount
-		uint32_t unknown03;
-		uint32_t unknown04;
+		uint32_t edge_start; //mtlstart //Face start
+		uint32_t edge_count; //mtlindex //Face amount
+		uint32_t unknown03; //Same, but with vertices?
+		uint32_t unknown04; // ... count
 		uint32_t unknown05;
 		uint32_t unknown06;
 		uint32_t unknown07;
@@ -149,8 +149,8 @@ namespace Falcom{
 		uint32_t unknown26;
 		uint32_t unknown27;
 		uint32_t unknown28;
-		uint32_t unknown29;
-		float    unknown30;
+		uint32_t id; //Still unsure about this
+		uint32_t unknown30; //Doesn't know the format of this
 	};
 	struct Vertex{
 		float x, y, z;
@@ -162,7 +162,7 @@ namespace Falcom{
 		public:
 			char name[256];
 			uint32_t unknown1;
-			uint32_t unknown2;
+			uint32_t vertex_size;
 			uint32_t texture_count;
 			
 			std::vector<TexRef> texture_refferences;
@@ -178,7 +178,7 @@ namespace Falcom{
 			void read( ByteViewReader& reader ){
 				reader.readData<char>( name, 256 );
 				unknown1 = reader.read32u();
-				unknown2 = reader.read32u();
+				vertex_size = reader.read32u();
 				
 				texture_count = reader.read32u();
 			//	std::cerr << "Texture_ref count: " << texture_count << '\n';
@@ -188,6 +188,11 @@ namespace Falcom{
 				
 				vertices_count = reader.read32u();
 			//	std::cerr << "Vertices count: " << vertices_count << '\n';
+				if (vertex_size != 40)
+				{
+					std::cout << "Does not yet support files with vertex_size == 48\n";
+					std::exit(-1);
+				}
 				reader.readVector( vertices, vertices_count );
 				
 				edge_count = reader.read32u();
@@ -197,32 +202,32 @@ namespace Falcom{
 				reader.readData<float>( unknown3, 11 );
 			}
 	};
-	class Frame{
-		public:
-			char name[260];
-			Matrix matrix;
-			void read( ByteViewReader& reader ){
-				reader.readStruct( *this );
-			}
-	};
 	
 	class SubModel{
 		public:
-			Frame frame;
+			char name[260];
+			Matrix matrix;
 			uint16_t texture_count;
 			std::vector<Texture> textures;
 			uint16_t mesh_count;
 			std::vector<Mesh> meshes;
+			uint8_t unknown1;
+			//TODO: unknown_block1
+			ByteView random_padding; //48 bytes if null frame, I'm missing something here, but it fixes a bunch of files for now
+			uint16_t children_count;
+			std::vector<SubModel> children;
+			
 			
 			void read( ByteViewReader& reader ){
-				frame.read( reader );
+				reader.readData<char>( name, 260 );
+				reader.readStruct( matrix );
 				
 				//Textures
 				auto amount = reader.read16u();
 				std::cout << "Texture count: " << amount << '\n';
 				reader.readVector( textures, amount );
-				for( auto texture : textures )
-					std::cout << texture.name << '\n';
+				//for( auto texture : textures )
+				//	std::cout << texture.name << '\n';
 				
 				//Meshes
 				mesh_count = reader.read16u();
@@ -230,16 +235,30 @@ namespace Falcom{
 				meshes.resize(mesh_count);
 				for( unsigned i=0; i<mesh_count; i++ )
 					meshes[i].read( reader );
+				
+				unknown1 = reader.read8u();
+				if (unknown1 == 1)
+				{
+					std::cout << "Does not yet support files with unknown1 == 1\n";
+					std::exit(-1);
+				}
+				
+				if (mesh_count == 0 && unknown1 == 0)
+					random_padding = reader.read( 48 );
+				
+				children_count = reader.read16u();
+				children.resize( children_count );
+				for( auto& child : children )
+					child.read( reader );
 			}
 	};
 	class Model{
 		public:
 		Buffer data;
-		ByteView unknown1; //bytes 48
-		Frame root;
-		ByteView unknown2; //bytes 55
+		ByteView unknown1; //bytes 46
+		uint16_t children_count;
 		
-		SubModel sub_model;
+		std::vector<SubModel> frames;
 		
 		Model( Buffer data );
 	};
@@ -248,15 +267,12 @@ namespace Falcom{
 Falcom::Model::Model( Buffer data_1 ) : data( data_1 ){
 	ByteViewReader reader( data );
 	std::cout << "Starting :D \n";
-	unknown1 = reader.read( 48 );
-	root.read( reader );
-	unknown2 = reader.read( 55 );
-	/*
-	Frame extra_frame;
-	extra_frame.read( reader );
-	reader.read( 211 );
-	*/
-	sub_model.read( reader );
+	unknown1 = reader.read( 46 );
+	
+	children_count = reader.read16u();
+	frames.resize( children_count );
+	for( auto& frame : frames )
+		frame.read( reader );
 }
 
 class TextureHandler{
@@ -320,7 +336,9 @@ class Model{
 		std::vector<Vertex> vertices;
 		std::vector<Face> faces;
 		std::vector<Vertex*> vertex_lookup;
-		uint32_t material_index;
+		
+		uint32_t edge_start;
+		uint32_t edge_count;
 		
 		Vertex* getVertex( uint16_t id ) const{
 			if( id >= vertex_lookup.size() ){
@@ -337,13 +355,12 @@ class Model{
 		void createLookup();
 		
 	public:
-		Model( const Falcom::Mesh& mesh ){
+		GLuint material_index;
+		Model( const Falcom::Mesh& mesh, const Falcom::TexRef& ref, TextureHandler& handler ){
 			addMesh( mesh );
-			createLookup();
-		}
-		Model( const std::vector<Falcom::Mesh>& meshes ){
-			for( auto& mesh : meshes )
-				addMesh( mesh );
+			material_index = handler.textures.at(ref.id).id;
+			edge_start = ref.edge_start;
+			edge_count = ref.edge_count;
 			createLookup();
 		}
 		
@@ -359,9 +376,9 @@ void Model::addMesh( const Falcom::Mesh& input ){
 	for( unsigned i=0; i < input.vertices_count; i++ ){
 		Vertex v;
 		v.id = i;
-		v.x = input.vertices[i].x;
-		v.y = input.vertices[i].y;
-		v.z = input.vertices[i].z;
+		v.x = input.vertices[i].x / 75;
+		v.y = input.vertices[i].y / 75;
+		v.z = input.vertices[i].z / 75;
 		v.u = input.vertices[i].u;
 		v.v = input.vertices[i].v;
 		vertices.emplace_back( v );
@@ -383,26 +400,8 @@ void Model::createLookup(){
 void Model::addFaces( std::vector<GLfloat>& points, std::vector<GLfloat>& uvs ) const{
 	uvs.reserve( uvs.size() + faces.size() * 3 * 2 );
 	points.reserve( points.size() + faces.size() * 3 * 3 );
-	for( auto& face : faces ){
-		/*
-		auto addVertex = [&]( uint16_t id ){
-				auto vertex = getVertex( id );
-				if( !vertex )
-					throw std::runtime_error( "Missing vertex lookup" );
-				
-				points.push_back( vertex->x );
-				points.push_back( vertex->y );
-				points.push_back( vertex->z );
-				uvs.push_back( vertex->u );
-				uvs.push_back( vertex->v );
-			};
-		addVertex( face.a );
-		addVertex( face.b );
-		addVertex( face.b );
-		addVertex( face.c );
-		addVertex( face.c );
-		addVertex( face.a );
-		/*/
+	for( uint32_t i=0; i<edge_count; i++ ){
+		auto& face = faces[i + edge_start];
 		auto vertex_a = getVertex( face.a );
 		auto vertex_b = getVertex( face.b );
 		auto vertex_c = getVertex( face.c );
@@ -415,30 +414,25 @@ void Model::addFaces( std::vector<GLfloat>& points, std::vector<GLfloat>& uvs ) 
 					uvs.push_back( v.v );
 				};
 			addVertex( *vertex_a );
-		//	addVertex( *vertex_b );
 			addVertex( *vertex_b );
-		//	addVertex( *vertex_c );
 			addVertex( *vertex_c );
-		//	addVertex( *vertex_a );
 		}
-		//*/
 	}
 }
 
+void getMeshes( const Falcom::SubModel& submodel, std::vector<Model>& models ){
+	
+	TextureHandler tex_handler( submodel );	//TODO: This is the wrong place to have this, as we can't clean up properly
+	for( auto& mesh : submodel.meshes )
+		for( auto& texref : mesh.texture_refferences )
+			models.emplace_back( mesh, texref, tex_handler );
+	for( auto& child : submodel.children )
+		getMeshes( child, models );
+}
 
 void getMeshes( const Falcom::Model& model, std::vector<Model>& models ){
-	for( auto& mesh : model.sub_model.meshes )
-		models.emplace_back( mesh );
-	//models.emplace_back( model.sub_model );
-	/*
-	if( frame.meshes.size() > 0 )	
-	//	models.emplace_back( frame.meshes );
-		for( auto& mesh : frame.meshes )
-			models.emplace_back( mesh );
-	
-	for( auto& child : frame.children )
-		getMeshes( child, models );
-	*/
+	for( auto& frame : model.frames )
+		getMeshes( frame, models );
 }
 
 void APIENTRY glDebugOutput(GLenum source, 
@@ -488,15 +482,15 @@ void APIENTRY glDebugOutput(GLenum source,
     std::cout << std::endl;
 }
 
+
+constexpr int window_width = 1920;
+constexpr int window_height = 1080;
 int main( int argc, char* argv[] ){
 	if( argc != 2 ){
 		std::cout << "Wrong amount of parameters\n";
 		return -1;
 	}
 	Falcom::Model xx( File( argv[1], "rb" ).readAll() );
-	std::vector<Model> models;
-	getMeshes( xx, models );
-	std::cout << "Amount of models: " << models.size() << std::endl;
 	
 	// Initialise GLFW
 	if( !glfwInit() ){
@@ -515,7 +509,7 @@ int main( int argc, char* argv[] ){
 	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
 	// Open a window and create its OpenGL context
 	GLFWwindow* window; // (In the accompanying source code, this variable is global)
-	window = glfwCreateWindow( 1024, 768, "Tutorial 01", NULL, NULL);
+	window = glfwCreateWindow( window_width, window_height, "Tutorial 01", NULL, NULL);
 	if( window == NULL ){
 		fprintf( stderr, "Failed to open GLFW window. If you have an Intel GPU, they are not 3.3 compatible. Try the 2.1 version of the tutorials.\n" );
 		glfwTerminate();
@@ -545,50 +539,61 @@ int main( int argc, char* argv[] ){
 	// Ensure we can capture the escape key being pressed below
 	glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
 	
+	
+	
+	
+	struct GlModel{
+		GLuint vertexbuffer;
+		GLuint uvsbuffer;
+		GLuint texture_id;
+		
+		// An array of 3 vectors which represents 3 vertices
+		std::vector<GLfloat> vertices;
+		std::vector<GLfloat> uvs;
+		
+	};
+	std::vector<GlModel> gl_models;
+	
+	
+	std::vector<Model> models;
+	getMeshes( xx, models );
+	std::cout << "Amount of models: " << models.size() << std::endl;
+	
+	for( auto& model : models ){
+		GlModel m;
+		model.addFaces( m.vertices, m.uvs );
+		
+		glGenBuffers(1, &m.vertexbuffer);
+		glBindBuffer(GL_ARRAY_BUFFER, m.vertexbuffer);
+		glBufferData(GL_ARRAY_BUFFER, m.vertices.size()*sizeof(GLfloat), m.vertices.data(), GL_STATIC_DRAW);
+		
+		glGenBuffers(1, &m.uvsbuffer);
+		glBindBuffer(GL_ARRAY_BUFFER, m.uvsbuffer);
+		glBufferData(GL_ARRAY_BUFFER, m.uvs.size()*sizeof(GLfloat), m.uvs.data(), GL_STATIC_DRAW);
+		
+		m.texture_id = model.material_index;
+		
+		gl_models.push_back(std::move(m));
+	}
+	//for( auto& i : vertices ){
+	//	i /= 75;
+	//}
+	
+	// Get uniforms
+	GLuint MatrixID = glGetUniformLocation(programID, "MVP");
+	GLuint TextureID  = glGetUniformLocation(programID, "myTextureSampler");
+	
 	GLuint VertexArrayID;
 	glGenVertexArrays(1, &VertexArrayID);
 	glBindVertexArray(VertexArrayID);
-	
-	
-	// An array of 3 vectors which represents 3 vertices
-	std::vector<GLfloat> vertices;
-	std::vector<GLfloat> uvs;
-	
-	for( auto& model : models ){
-		model.addFaces( vertices, uvs );
-	}
-	for( auto& i : vertices ){
-		i /= 10;
-	}
-	
-	// Get a handle for our "MVP" uniform
-	GLuint MatrixID = glGetUniformLocation(programID, "MVP");
-	
-	// Get a handle for our "myTextureSampler" uniform
-	GLuint TextureID  = glGetUniformLocation(programID, "myTextureSampler");
 
-	// This will identify our vertex buffer
-	GLuint vertexbuffer;
-	// Generate 1 buffer, put the resulting identifier in vertexbuffer
-	glGenBuffers(1, &vertexbuffer);
-	// The following commands will talk about our 'vertexbuffer' buffer
-	glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
-	// Give our vertices to OpenGL.
-	glBufferData(GL_ARRAY_BUFFER, vertices.size()*sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
-	
-	GLuint uvsbuffer;
-	glGenBuffers(1, &uvsbuffer);
-	glBindBuffer(GL_ARRAY_BUFFER, uvsbuffer);
-	glBufferData(GL_ARRAY_BUFFER, uvs.size()*sizeof(GLfloat), uvs.data(), GL_STATIC_DRAW);
-	
-	//Load textures
-	TextureHandler tex_handler( xx.sub_model );	
 	
 	// Enable depth test
 	glEnable(GL_DEPTH_TEST);
 	glDepthMask(GL_TRUE);
+	glEnable(GL_DEPTH_CLAMP);
 	//Set up a perspective view. This is needed for depth testing to work
-	glm::perspective(glm::radians(45.0f), (float)1024/(float)768, 0.1f, 100.0f);
+	glm::perspective(glm::radians(45.0f), (float)window_width/(float)window_height, 0.1f, 100.0f);
 
 	//GLfloat i = 0;
 	do{
@@ -603,45 +608,49 @@ int main( int argc, char* argv[] ){
 		glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		
-		// 1rst attribute buffer : vertices
-		glEnableVertexAttribArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexbuffer);
-		glVertexAttribPointer(
-			0,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
-			3,                  // size
-			GL_FLOAT,           // type
-			GL_FALSE,           // normalized?
-			0,                  // stride
-			(void*)0            // array buffer offset
-		);
-		
-		// 1rst attribute buffer : vertices
-		glEnableVertexAttribArray(1);
-		glBindBuffer(GL_ARRAY_BUFFER, uvsbuffer);
-		glVertexAttribPointer(
-			1,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
-			2,                  // size
-			GL_FLOAT,           // type
-			GL_FALSE,           // normalized?
-			0,                  // stride
-			(void*)0            // array buffer offset
-		);
-		
-		// Use our shader
-		glUseProgram(programID);
-		glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
-		
-		
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, tex_handler.textures[0].id );
-		glUniform1i(TextureID, 0);
-		
-		
-		// Draw the triangle !
-		glDrawArrays(GL_TRIANGLES, 0, vertices.size()); // Starting from vertex 0; 3 vertices total -> 1 triangle
-		//glDrawArrays(GL_LINES, 0, vertices.size()); // Starting from vertex 0; 3 vertices total -> 1 triangle
-		glDisableVertexAttribArray(0);
-		glDisableVertexAttribArray(1);
+		//for( auto& m : gl_models ){
+		for(size_t i=0; i<gl_models.size(); i++){
+			auto& m = gl_models[i];
+			// 1rst attribute buffer : vertices
+			glEnableVertexAttribArray(0);
+			glBindBuffer(GL_ARRAY_BUFFER, m.vertexbuffer);
+			glVertexAttribPointer(
+				0,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
+				3,                  // size
+				GL_FLOAT,           // type
+				GL_FALSE,           // normalized?
+				0,                  // stride
+				(void*)0            // array buffer offset
+			);
+			
+			// 1rst attribute buffer : vertices
+			glEnableVertexAttribArray(1);
+			glBindBuffer(GL_ARRAY_BUFFER, m.uvsbuffer);
+			glVertexAttribPointer(
+				1,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
+				2,                  // size
+				GL_FLOAT,           // type
+				GL_FALSE,           // normalized?
+				0,                  // stride
+				(void*)0            // array buffer offset
+			);
+			
+			// Use our shader
+			glUseProgram(programID);
+			glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
+			
+			
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, m.texture_id );
+			glUniform1i(TextureID, 0);
+			
+			
+			// Draw the triangle !
+			glDrawArrays(GL_TRIANGLES, 0, m.vertices.size()); // Starting from vertex 0; 3 vertices total -> 1 triangle
+			//glDrawArrays(GL_LINES, 0, m.vertices.size()); // Starting from vertex 0; 3 vertices total -> 1 triangle
+			glDisableVertexAttribArray(0);
+			glDisableVertexAttribArray(1);
+		}
 
 		// Swap buffers
 		glfwSwapBuffers(window);
