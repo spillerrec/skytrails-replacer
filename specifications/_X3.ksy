@@ -140,9 +140,9 @@ types:
         
   texture_ref:
     seq:
-      - id: start1
+      - id: edge_start
         type: u4le
-      - id: count1
+      - id: edge_count
         type: u4le
       - id: start2
         type: u4le
@@ -151,7 +151,11 @@ types:
       - id: unknown
         type: u4le
         repeat: expr
-        repeat-expr: 26
+        repeat-expr: 24
+      - id: order
+        type: u4le
+      - id: unknown_format
+        size: 4
         
   vertex:
     seq:

@@ -8,4 +8,5 @@ out vec2 TexCoord;
 void main(){
   gl_Position = MVP * vec4(vertexPosition_modelspace,1);
     TexCoord = aTexCoord;
+	TexCoord.y = 1.0 - TexCoord.y;
 }

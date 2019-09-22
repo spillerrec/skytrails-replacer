@@ -17,6 +17,9 @@ using namespace glm;
 #include <iostream>
 #include <fstream>
 #include <vector>
+
+const std::string app_path = "../";
+
 GLuint LoadShaders(const char * vertex_file_path,const char * fragment_file_path){
 
 	// Create the shaders
@@ -203,6 +206,27 @@ namespace Falcom{
 			}
 	};
 	
+	class UnknownType{
+	private:
+		ByteView u1;
+		uint32_t count = 0;
+		ByteView u2;
+		ByteView u3;
+		ByteView u4;
+		ByteView u5;
+	public:
+		void read( ByteViewReader& reader ){
+			u1 = reader.read(32);
+			count = reader.read32u();
+			u2 = reader.read(12);
+			
+			u3 = reader.read(count * 4*4);
+			u4 = reader.read(count * 4*5);
+			u5 = reader.read(count * 4*4);
+		}
+		
+	};
+	
 	class SubModel{
 		public:
 			char name[260];
@@ -212,7 +236,7 @@ namespace Falcom{
 			uint16_t mesh_count;
 			std::vector<Mesh> meshes;
 			uint8_t unknown1;
-			//TODO: unknown_block1
+			UnknownType unknown_block1;
 			ByteView random_padding; //48 bytes if null frame, I'm missing something here, but it fixes a bunch of files for now
 			uint16_t children_count;
 			std::vector<SubModel> children;
@@ -239,8 +263,8 @@ namespace Falcom{
 				unknown1 = reader.read8u();
 				if (unknown1 == 1)
 				{
-					std::cout << "Does not yet support files with unknown1 == 1\n";
-					std::exit(-1);
+					unknown_block1.read( reader );
+					std::cout << "Warning: unknown1 == 1\n";
 				}
 				
 				if (mesh_count == 0 && unknown1 == 0)
@@ -269,10 +293,16 @@ Falcom::Model::Model( Buffer data_1 ) : data( data_1 ){
 	std::cout << "Starting :D \n";
 	unknown1 = reader.read( 46 );
 	
+	try{
 	children_count = reader.read16u();
 	frames.resize( children_count );
 	for( auto& frame : frames )
 		frame.read( reader );
+	}
+	catch( ... )
+	{
+		std::cout << "Warning, file reading stopped with errors!!!" << std::endl;
+	}
 }
 
 class TextureHandler{
@@ -294,7 +324,7 @@ class TextureHandler{
 			
 			for( auto& tex : textures ){
 			//	auto &tex = textures[0];
-				auto path = "images/" + tex.filename;
+				auto path = app_path + "debug/images/" + tex.filename;
 				path = path.substr(0, path.size()-4) + ".dds";
 				tex.image.load( path.c_str() );
 				
@@ -365,6 +395,28 @@ class Model{
 		}
 		
 		void addFaces( std::vector<GLfloat>& points, std::vector<GLfloat>& uvs ) const;
+		
+		void find_boundaries(float& x_min, float& y_min, float& z_min, float& x_max, float& y_max, float& z_max){
+			for(auto v : vertices){
+				x_min = std::min(x_min, v.x);
+				y_min = std::min(y_min, v.y);
+				z_min = std::min(z_min, v.z);
+				x_max = std::max(x_max, v.x);
+				y_max = std::max(y_max, v.y);
+				z_max = std::max(z_max, v.z);
+			}
+		}
+		void offset(float x, float y, float z){
+			for(auto& v : vertices){
+				v.x += x;
+				v.y += y;
+				v.z += z;
+				auto m = std::max(std::abs(x), std::max(std::abs(y), std::abs(z)));
+				v.x /= m;
+				v.y /= m;
+				v.z /= m;
+			}
+		}
 };
 
 void Model::addMesh( const Falcom::Mesh& input ){
@@ -376,9 +428,9 @@ void Model::addMesh( const Falcom::Mesh& input ){
 	for( unsigned i=0; i < input.vertices_count; i++ ){
 		Vertex v;
 		v.id = i;
-		v.x = input.vertices[i].x / 75;
-		v.y = input.vertices[i].y / 75;
-		v.z = input.vertices[i].z / 75;
+		v.x = input.vertices[i].x;
+		v.y = input.vertices[i].y;
+		v.z = input.vertices[i].z;
 		v.u = input.vertices[i].u;
 		v.v = input.vertices[i].v;
 		vertices.emplace_back( v );
@@ -534,10 +586,10 @@ int main( int argc, char* argv[] ){
 		std::cout << "Could not start debug context!" << std::endl;
 	
 	
-	GLuint programID = LoadShaders( "../vertex.glsl", "../fragment.glsl" );
+	GLuint programID = LoadShaders( (app_path + "vertex.glsl").c_str(), (app_path + "fragment.glsl").c_str() );
 	
 	// Ensure we can capture the escape key being pressed below
-	glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
+	//glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
 	
 	
 	
@@ -557,11 +609,30 @@ int main( int argc, char* argv[] ){
 	
 	std::vector<Model> models;
 	getMeshes( xx, models );
+//	auto model_copy = models[2];
+//	models.clear();
+//	models.push_back(model_copy);
 	std::cout << "Amount of models: " << models.size() << std::endl;
 	
+	float x_min=std::numeric_limits<float>::max(), x_max=std::numeric_limits<float>::min();
+	float y_min=x_min, y_max=x_max;
+	float z_min=x_min, z_max=x_max;
+	for( auto& model : models )
+		model.find_boundaries(x_min, y_min, z_min, x_max, y_max, z_max);
+	for( auto& model : models )
+		model.offset(-(x_max-x_min)/2, -(y_max-y_min)/2, -(z_max-z_min)/2);
 	for( auto& model : models ){
 		GlModel m;
 		model.addFaces( m.vertices, m.uvs );
+		for( size_t x =0; x<m.vertices.size()/3; x++ ){
+			auto v = m.vertices.data() + x*3;
+			x_min = std::min(x_min, v[0]);
+			y_min = std::min(y_min, v[1]);
+			z_min = std::min(z_min, v[2]);
+			x_max = std::max(x_max, v[0]);
+			y_max = std::max(y_max, v[1]);
+			z_max = std::max(z_max, v[2]);
+		}
 		
 		glGenBuffers(1, &m.vertexbuffer);
 		glBindBuffer(GL_ARRAY_BUFFER, m.vertexbuffer);
@@ -575,9 +646,6 @@ int main( int argc, char* argv[] ){
 		
 		gl_models.push_back(std::move(m));
 	}
-	//for( auto& i : vertices ){
-	//	i /= 75;
-	//}
 	
 	// Get uniforms
 	GLuint MatrixID = glGetUniformLocation(programID, "MVP");
@@ -586,24 +654,59 @@ int main( int argc, char* argv[] ){
 	GLuint VertexArrayID;
 	glGenVertexArrays(1, &VertexArrayID);
 	glBindVertexArray(VertexArrayID);
-
 	
 	// Enable depth test
 	glEnable(GL_DEPTH_TEST);
 	glDepthMask(GL_TRUE);
 	glEnable(GL_DEPTH_CLAMP);
 	//Set up a perspective view. This is needed for depth testing to work
-	glm::perspective(glm::radians(45.0f), (float)window_width/(float)window_height, 0.1f, 100.0f);
+	glm::perspective(glm::radians(45.0f), (float)window_width/(float)window_height, -0.1f, 2000.0f);
 
 	//GLfloat i = 0;
+	
+	bool exit_program = false;
+	double old_xpos = 0, old_ypos = 0;
+	glfwGetCursorPos(window, &old_xpos, &old_ypos);
+	float rot_x = 0, rot_y = 0;
+	float mov_x = 0, mov_y = 0, mov_z = 0;
+	float scale = 1.0;
 	do{
+		//Get mouse movement
 		double xpos = 0, ypos = 0;
+		double dx, dy;
 		glfwGetCursorPos(window, &xpos, &ypos);
+		dx = xpos - old_xpos;
+		dy = ypos - old_ypos;
+		old_xpos = xpos;
+		old_ypos = ypos;
+		
+		
+		if( glfwGetKey(window, GLFW_KEY_LEFT_SHIFT ) == GLFW_PRESS )
+		{
+			mov_x += dx / 100.f;
+			mov_y += dy / 100.f;
+		}
+		else if( glfwGetKey(window, GLFW_KEY_LEFT_CONTROL ) == GLFW_PRESS )
+		{
+			auto dist = dx / 10.f;
+			scale *= 1.0 - dist;
+		}
+		else if( glfwGetKey(window, GLFW_KEY_LEFT_ALT ) == GLFW_PRESS )
+		{
+			rot_x += dx / 300.f;
+			rot_y += dy / 300.f;
+		}
+		
+		//Close the program when pressing Esc
+		if( glfwGetKey(window, GLFW_KEY_ESCAPE ) == GLFW_PRESS )
+			exit_program = true;
 		
 		
 		glm::mat4 MVP{ 1 };
-		MVP = glm::rotate( MVP, (float)ypos / 300.f, glm::vec3(1,0,0) );
-		MVP = glm::rotate( MVP, (float)xpos / 300.f, glm::vec3(0,1,0) );
+		MVP = glm::translate( MVP, glm::vec3(mov_x, mov_y, mov_z) );
+		MVP = glm::scale( MVP, glm::vec3(scale, scale, scale) );
+		MVP = glm::rotate( MVP, rot_x, glm::vec3(0,1,0) );
+		MVP = glm::rotate( MVP, rot_y, glm::vec3(1,0,1) );
 	
 		glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -657,8 +760,8 @@ int main( int argc, char* argv[] ){
 		glfwPollEvents();
 		
 		//i += 0.002;
-	} // Check if the ESC key was pressed or the window was closed
-	while( glfwGetKey(window, GLFW_KEY_ESCAPE ) != GLFW_PRESS && glfwWindowShouldClose(window) == 0 );
+	} // Check if the window was closed
+	while( !exit_program && glfwWindowShouldClose(window) == 0 );
 	
 	return 0;
 }
