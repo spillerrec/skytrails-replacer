@@ -1,2 +1,4 @@
 debug
 release
+glsl-fragment.h
+glsl-vertex.h

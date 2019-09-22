@@ -19,75 +19,38 @@ using namespace glm;
 #include <fstream>
 #include <vector>
 
-const std::string app_path = "F:/Projects/skytrails-replacer/xxViewer/";
+#include "glsl-fragment.h"
+#include "glsl-vertex.h"
 
-GLuint LoadShaders(const char * vertex_file_path,const char * fragment_file_path){
-
+GLuint LoadShaders(){
 	// Create the shaders
 	GLuint VertexShaderID = glCreateShader(GL_VERTEX_SHADER);
 	GLuint FragmentShaderID = glCreateShader(GL_FRAGMENT_SHADER);
 
-	// Read the Vertex Shader code from the file
-	std::string VertexShaderCode;
-	std::ifstream VertexShaderStream(vertex_file_path, std::ios::in);
-	if(VertexShaderStream.is_open()){
-		std::string Line = "";
-		while(getline(VertexShaderStream, Line))
-			VertexShaderCode += "\n" + Line;
-		VertexShaderStream.close();
-	}else{
-		printf("Impossible to open %s. Are you in the right directory ? Don't forget to read the FAQ !\n", vertex_file_path);
-		getchar();
-		return 0;
-	}
-
-	// Read the Fragment Shader code from the file
-	std::string FragmentShaderCode;
-	std::ifstream FragmentShaderStream(fragment_file_path, std::ios::in);
-	if(FragmentShaderStream.is_open()){
-		std::string Line = "";
-		while(getline(FragmentShaderStream, Line))
-			FragmentShaderCode += "\n" + Line;
-		FragmentShaderStream.close();
-	}
-
 	GLint Result = GL_FALSE;
 	int InfoLogLength;
 
+	auto compile_shader = [&]( GLuint& id, auto* src ){
+		glShaderSource(id, 1, &src, NULL);
+		glCompileShader(id);
+
+		// Check Vertex Shader
+		glGetShaderiv(id, GL_COMPILE_STATUS, &Result);
+		glGetShaderiv(id, GL_INFO_LOG_LENGTH, &InfoLogLength);
+		if ( InfoLogLength > 0 ){
+			std::vector<char> VertexShaderErrorMessage(InfoLogLength+1);
+			glGetShaderInfoLog(id, InfoLogLength, NULL, &VertexShaderErrorMessage[0]);
+			printf("%s\n", &VertexShaderErrorMessage[0]);
+		}
+	};
 
 	// Compile Vertex Shader
-	printf("Compiling shader : %s\n", vertex_file_path);
-	char const * VertexSourcePointer = VertexShaderCode.c_str();
-	glShaderSource(VertexShaderID, 1, &VertexSourcePointer , NULL);
-	glCompileShader(VertexShaderID);
-
-	// Check Vertex Shader
-	glGetShaderiv(VertexShaderID, GL_COMPILE_STATUS, &Result);
-	glGetShaderiv(VertexShaderID, GL_INFO_LOG_LENGTH, &InfoLogLength);
-	if ( InfoLogLength > 0 ){
-		std::vector<char> VertexShaderErrorMessage(InfoLogLength+1);
-		glGetShaderInfoLog(VertexShaderID, InfoLogLength, NULL, &VertexShaderErrorMessage[0]);
-		printf("%s\n", &VertexShaderErrorMessage[0]);
-	}
-
-
+	printf("Compiling vertex shader\n");
+	compile_shader( VertexShaderID, VERTEX_SRC );
 
 	// Compile Fragment Shader
-	printf("Compiling shader : %s\n", fragment_file_path);
-	char const * FragmentSourcePointer = FragmentShaderCode.c_str();
-	glShaderSource(FragmentShaderID, 1, &FragmentSourcePointer , NULL);
-	glCompileShader(FragmentShaderID);
-
-	// Check Fragment Shader
-	glGetShaderiv(FragmentShaderID, GL_COMPILE_STATUS, &Result);
-	glGetShaderiv(FragmentShaderID, GL_INFO_LOG_LENGTH, &InfoLogLength);
-	if ( InfoLogLength > 0 ){
-		std::vector<char> FragmentShaderErrorMessage(InfoLogLength+1);
-		glGetShaderInfoLog(FragmentShaderID, InfoLogLength, NULL, &FragmentShaderErrorMessage[0]);
-		printf("%s\n", &FragmentShaderErrorMessage[0]);
-	}
-
-
+	printf("Compiling fragment shader\n");
+	compile_shader( FragmentShaderID, FRAGMENT_SRC );
 
 	// Link the program
 	printf("Linking program\n");
@@ -323,35 +286,40 @@ class TextureHandler{
 			}
 			
 			for( auto& tex : textures ){
-			//	auto &tex = textures[0];
-				auto path = app_path + "debug/images-png/" + tex.filename;
-				path = path.substr(0, path.size()-4) + ".png";
-				png::image< png::rgba_pixel > image(path);
-				
-				auto buffer = std::make_unique<uint8_t[]>(image.get_height()*image.get_width()*4);
-				for (png::uint_32 y = 0; y < image.get_height(); ++y)
-					for (png::uint_32 x = 0; x < image.get_width(); ++x)
-					{
-						auto pix = image[y][x];
-						auto out = buffer.get() + 4*(x + y*image.get_width());
-						if(pix.red == 255 && pix.green==0 && pix.blue==0)
-							pix.red = pix.alpha = 0;
-						out[0] = pix.red;
-						out[1] = pix.green;
-						out[2] = pix.blue;
-						out[3] = pix.alpha;
-					}
-
 				tex.id = -1;
-				glGenTextures( 1, &tex.id );
-				glBindTexture( GL_TEXTURE_2D, tex.id );
-				
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-				
-				glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.get_width(), image.get_height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.get());
-				
-				glGenerateMipmap(GL_TEXTURE_2D);
+				auto path = "images/" + tex.filename;
+				path = path.substr(0, path.size()-4) + ".png";
+				try{
+					png::image< png::rgba_pixel > image(path);
+					
+					auto buffer = std::make_unique<uint8_t[]>(image.get_height()*image.get_width()*4);
+					for (png::uint_32 y = 0; y < image.get_height(); ++y)
+						for (png::uint_32 x = 0; x < image.get_width(); ++x)
+						{
+							auto pix = image[y][x];
+							auto out = buffer.get() + 4*(x + y*image.get_width());
+							if(pix.red == 255 && pix.green==0 && pix.blue==0)
+								pix.red = pix.alpha = 0;
+							out[0] = pix.red;
+							out[1] = pix.green;
+							out[2] = pix.blue;
+							out[3] = pix.alpha;
+						}
+
+					glGenTextures( 1, &tex.id );
+					glBindTexture( GL_TEXTURE_2D, tex.id );
+					
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+					
+					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.get_width(), image.get_height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.get());
+					
+					glGenerateMipmap(GL_TEXTURE_2D);
+				}
+				catch(...)
+				{
+					std::cout << "Error, could not load texture: " << path.c_str() << std::endl;
+				}
 			}
 		}
 		
@@ -598,12 +566,7 @@ int main( int argc, char* argv[] ){
 		std::cout << "Could not start debug context!" << std::endl;
 	
 	
-	GLuint programID = LoadShaders( (app_path + "vertex.glsl").c_str(), (app_path + "fragment.glsl").c_str() );
-	
-	// Ensure we can capture the escape key being pressed below
-	//glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
-	
-	
+	GLuint programID = LoadShaders();
 	
 	
 	struct GlModel{
@@ -726,6 +689,9 @@ int main( int argc, char* argv[] ){
 		//for( auto& m : gl_models ){
 		for(size_t i=0; i<gl_models.size(); i++){
 			auto& m = gl_models[i];
+			if( m.texture_id == -1 )
+				continue;
+			
 			// 1rst attribute buffer : vertices
 			glEnableVertexAttribArray(0);
 			glBindBuffer(GL_ARRAY_BUFFER, m.vertexbuffer);
