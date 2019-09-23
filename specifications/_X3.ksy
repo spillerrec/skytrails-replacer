@@ -4,13 +4,21 @@ meta:
   endian: le
   
 seq:
+  - id: type
+    type: u1
+  - id: version
+    type: u1
   - id: header
     type: header
+    if: version >= 2
+    
+  - id: frame_count
+    type: u2le
     
   - id: submodel
     type: submodel
     repeat: expr
-    repeat-expr: header.unknown12
+    repeat-expr: frame_count
     
   
   - id: file_end_test
@@ -98,10 +106,6 @@ types:
         type: f4le
   header:
     seq:
-      - id: type
-        type: u1
-      - id: count
-        type: u1
       - id: unknown1
         type: f4le
       - id: unknown2
@@ -124,9 +128,18 @@ types:
         type: f4le
       - id: unknown11
         type: f4le
-      - id: unknown12
-        type: u2le
         
+  
+  texture_v1:
+    seq:
+      - id: unknown
+        size: 186
+      - id: name
+        type: str
+        size: 256
+        encoding: UTF-8
+      - id:  unknown2
+        size: 102
   texture:
     seq:
       - id: unknown
@@ -208,8 +221,15 @@ types:
       - id: texture_ref_count
         type: u4le
         
+      - id: textures
+        type: texture_v1
+        if: _root.version == 1
+        repeat: expr
+        repeat-expr: texture_ref_count
+        
       - id: texture_refferences
         type: texture_ref
+        if: _root.version >= 2
         repeat: expr
         repeat-expr: texture_ref_count
         
@@ -347,9 +367,11 @@ types:
         
       - id: texture_count
         type: u2le
+        if: _root.version >= 2
         
       - id: textures
         type: texture
+        if: _root.version >= 2
         repeat: expr
         repeat-expr: texture_count
         
