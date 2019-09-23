@@ -87,6 +87,13 @@ namespace Falcom{
 		char name[256];
 		uint8_t unknown2[524];
 	};
+	struct TextureV1{
+		uint32_t edge_start;
+		uint32_t edge_count;
+		uint8_t unknown[176];
+		char name[256];
+		uint8_t unknown2[104];
+	};
 	struct TexRef{
 		uint32_t edge_start; //mtlstart //Face start
 		uint32_t edge_count; //mtlindex //Face amount
@@ -133,6 +140,7 @@ namespace Falcom{
 			uint32_t texture_count;
 			
 			std::vector<TexRef> texture_refferences;
+			std::vector<TextureV1> textures;
 			
 			uint32_t vertices_count;
 			std::vector<Vertex> vertices;
@@ -142,19 +150,18 @@ namespace Falcom{
 			
 			float unknown3[11];
 			
-			void read( ByteViewReader& reader ){
+			void read( ByteViewReader& reader, int version ){
 				reader.readData<char>( name, 256 );
 				unknown1 = reader.read32u();
 				vertex_size = reader.read32u();
 				
 				texture_count = reader.read32u();
-			//	std::cerr << "Texture_ref count: " << texture_count << '\n';
-				reader.readVector( texture_refferences, texture_count );
-			//	for( auto& ref : texture_refferences )
-			//		std::cout << "TexRef:" << ref.unknown29 << "\n";
+				if( version >= 2 )
+					reader.readVector( texture_refferences, texture_count );
+				else
+					reader.readVector( textures, texture_count );
 				
 				vertices_count = reader.read32u();
-			//	std::cerr << "Vertices count: " << vertices_count << '\n';
 				if (vertex_size != 40)
 				{
 					std::cout << "Does not yet support files with vertex_size == 48\n";
@@ -163,7 +170,6 @@ namespace Falcom{
 				reader.readVector( vertices, vertices_count );
 				
 				edge_count = reader.read32u();
-			//	std::cerr << "Edge count: " << edge_count << '\n';
 				reader.readVector( edges, edge_count );
 				
 				reader.readData<float>( unknown3, 11 );
@@ -195,9 +201,7 @@ namespace Falcom{
 		public:
 			char name[260];
 			Matrix matrix;
-			uint16_t texture_count;
 			std::vector<Texture> textures;
-			uint16_t mesh_count;
 			std::vector<Mesh> meshes;
 			uint8_t unknown1;
 			UnknownType unknown_block1;
@@ -206,23 +210,22 @@ namespace Falcom{
 			std::vector<SubModel> children;
 			
 			
-			void read( ByteViewReader& reader ){
+			void read( ByteViewReader& reader, int version ){
 				reader.readData<char>( name, 260 );
 				reader.readStruct( matrix );
 				
 				//Textures
-				auto amount = reader.read16u();
-				std::cout << "Texture count: " << amount << '\n';
-				reader.readVector( textures, amount );
-				//for( auto texture : textures )
-				//	std::cout << texture.name << '\n';
+				if( version >= 2 ){
+					auto amount = reader.read16u();
+					reader.readVector( textures, amount );
+				}
 				
 				//Meshes
-				mesh_count = reader.read16u();
+				auto mesh_count = reader.read16u();
 				std::cout << "Mesh count: " << mesh_count << '\n';
 				meshes.resize(mesh_count);
 				for( unsigned i=0; i<mesh_count; i++ )
-					meshes[i].read( reader );
+					meshes[i].read( reader, version );
 				
 				unknown1 = reader.read8u();
 				if (unknown1 == 1)
@@ -237,12 +240,15 @@ namespace Falcom{
 				children_count = reader.read16u();
 				children.resize( children_count );
 				for( auto& child : children )
-					child.read( reader );
+					child.read( reader, version );
 			}
 	};
 	class Model{
 		public:
 		Buffer data;
+		
+		uint8_t type;
+		uint8_t version;
 		ByteView unknown1; //bytes 46
 		uint16_t children_count;
 		
@@ -255,13 +261,17 @@ namespace Falcom{
 Falcom::Model::Model( Buffer data_1 ) : data( data_1 ){
 	ByteViewReader reader( data );
 	std::cout << "Starting :D \n";
-	unknown1 = reader.read( 46 );
+	
+	type     = reader.read8u();
+	version  = reader.read8u();
+	if( version >= 2 )
+		unknown1 = reader.read( 11*sizeof(float) );
 	
 	try{
-	children_count = reader.read16u();
-	frames.resize( children_count );
-	for( auto& frame : frames )
-		frame.read( reader );
+		children_count = reader.read16u();
+		frames.resize( children_count );
+		for( auto& frame : frames )
+			frame.read( reader, version );
 	}
 	catch( ... )
 	{
@@ -273,18 +283,12 @@ class TextureHandler{
 	public:	
 		struct Texture{
 			std::string filename;
-			GLuint id;
+			GLuint id = -1;
+			Texture(std::string filename) : filename(filename) {}
 		};
 		std::vector<Texture> textures;
 		
-		
-		TextureHandler( const Falcom::SubModel& m ) {
-			for( auto& fal_tex : m.textures ){
-				Texture t;
-				t.filename = fal_tex.name;
-				textures.push_back( t );
-			}
-			
+		void loadAll(){
 			for( auto& tex : textures ){
 				tex.id = -1;
 				auto path = "images/" + tex.filename;
@@ -321,6 +325,17 @@ class TextureHandler{
 					std::cout << "Error, could not load texture: " << path.c_str() << std::endl;
 				}
 			}
+		}
+		
+		TextureHandler( const Falcom::SubModel& m ) {
+			for( auto& fal_tex : m.textures )
+				textures.emplace_back( fal_tex.name );
+			loadAll();
+		}
+		
+		TextureHandler( const Falcom::TextureV1& tex ) {
+			textures.emplace_back( tex.name );
+			loadAll();
 		}
 		
 };
@@ -371,6 +386,14 @@ class Model{
 			material_index = handler.textures.at(ref.id).id;
 			edge_start = ref.edge_start;
 			edge_count = ref.edge_count;
+			createLookup();
+		}
+		Model( const Falcom::Mesh& mesh, const Falcom::TextureV1& texture ){
+			TextureHandler handler(texture);
+			addMesh( mesh );
+			material_index = handler.textures.at(0).id;
+			edge_start = texture.edge_start;
+			edge_count = texture.edge_count;
 			createLookup();
 		}
 		
@@ -456,8 +479,12 @@ void getMeshes( const Falcom::SubModel& submodel, std::vector<Model>& models ){
 	
 	TextureHandler tex_handler( submodel );	//TODO: This is the wrong place to have this, as we can't clean up properly
 	for( auto& mesh : submodel.meshes )
+	{
 		for( auto& texref : mesh.texture_refferences )
 			models.emplace_back( mesh, texref, tex_handler );
+		for( auto& texture : mesh.textures )
+			models.emplace_back( mesh, texture );
+	}
 	for( auto& child : submodel.children )
 		getMeshes( child, models );
 }

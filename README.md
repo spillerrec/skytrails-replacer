@@ -15,7 +15,7 @@ Run `cmake .` followed by `make`.
 - GLFW
 - glm
 
-**Usage*
+**Usage**
 
 `./trailsViewer INPUT_X3_FILE`
 

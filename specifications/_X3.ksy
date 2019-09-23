@@ -132,14 +132,18 @@ types:
   
   texture_v1:
     seq:
+      - id: edge_start #An entire group of 3 values
+        type: u4le
+      - id: edge_count
+        type: u4le
       - id: unknown
-        size: 186
+        size: 176
       - id: name
         type: str
         size: 256
         encoding: UTF-8
       - id:  unknown2
-        size: 102
+        size: 104
   texture:
     seq:
       - id: unknown
