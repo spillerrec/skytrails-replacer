@@ -148,7 +148,8 @@ namespace Falcom{
 			uint32_t edge_count;
 			std::vector<uint16_t> edges;
 			
-			float unknown3[11];
+			float unknown3[10];
+			uint32_t unknown11;
 			
 			void read( ByteViewReader& reader, int version ){
 				reader.readData<char>( name, 256 );
@@ -172,7 +173,11 @@ namespace Falcom{
 				edge_count = reader.read32u();
 				reader.readVector( edges, edge_count );
 				
-				reader.readData<float>( unknown3, 11 );
+				reader.readData<float>( unknown3, 10 );
+				unknown11 = reader.read32u();
+				std::cout << "Mesh unknown: " << unknown11 << std::endl;
+				if (unknown11 > 0)
+					reader.read(4 * unknown11 * 26);
 			}
 	};
 	
@@ -186,13 +191,19 @@ namespace Falcom{
 		ByteView u5;
 	public:
 		void read( ByteViewReader& reader ){
-			u1 = reader.read(32);
+			u1 = reader.read(5*4);
 			count = reader.read32u();
-			u2 = reader.read(12);
+			auto unknown6 = reader.read32u();
+			auto unknown7 = reader.read32u();
 			
-			u3 = reader.read(count * 4*4);
-			u4 = reader.read(count * 4*5);
-			u5 = reader.read(count * 4*4);
+			auto unknown8 = reader.read32u();
+			u3 = reader.read(unknown8 * 4*4);
+			
+			auto count2 = reader.read32u();
+			u4 = reader.read(count2 * 4*5);
+			auto count3 = reader.read32u();
+			u5 = reader.read(count3 * 4*4);
+			auto unknown9 = reader.read32u();
 		}
 		
 	};

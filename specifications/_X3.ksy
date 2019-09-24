@@ -276,7 +276,12 @@ types:
         type: f4le
         
       - id: unknown7
+        type: u4le
+        
+      - id: unknown_data
         type: f4le
+        repeat: expr
+        repeat-expr: unknown7 * 26
        
       # This doesn't seem to be correct 
       #- id: block
@@ -324,34 +329,49 @@ types:
   unknown_type:
     seq:
       - id: unknown1
-        size: 32
+        type: u4le
+      - id: unknown2
+        type: u4le
+      - id: unknown3
+        type: u4le
+      - id: unknown4
+        type: u4le
+      - id: unknown5
+        type: u4le
         
       - id: count
         type: u4le
         
-      - id: unknown2
-        size: 12
+      - id: unknown6
+        type: u4le
+      - id: unknown7
+        type: u4le
+      - id: unknown8
+        type: u4le
         
       - id: unknown_block1
         type: unknown_type2
         repeat: expr
-        repeat-expr: count
+        repeat-expr: unknown8
         
-      #- id: count2
-      #  type: u4le
+      - id: count2
+        type: u4le
         
       - id: unknown_block2
         type: unknown_type3
         repeat: expr
-        repeat-expr: count
+        repeat-expr: count2
         
-      #- id: count3
-      #  type: u4le
+      - id: count3
+        type: u4le
         
       - id: unknown_block3
         type: unknown_type2
         repeat: expr
-        repeat-expr: count
+        repeat-expr: count3
+        
+      - id: unknown9
+        type: u4le
         
   submodel:
     seq:
