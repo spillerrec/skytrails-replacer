@@ -22,6 +22,11 @@ using namespace glm;
 #include "glsl-fragment.h"
 #include "glsl-vertex.h"
 
+static int error( const char* msg, int code = -1 ){
+	std::cout << "Error: " << msg << '\n';
+	return code;
+}
+
 GLuint LoadShaders(){
 	// Create the shaders
 	GLuint VertexShaderID = glCreateShader(GL_VERTEX_SHADER);
@@ -79,6 +84,29 @@ GLuint LoadShaders(){
 }
 
 namespace Falcom{
+	struct ArchiveEntry{
+		char name[8];
+		char dot;
+		char extension[3];
+		uint32_t unknown1; //Supposed to be a timestamp
+		uint32_t compressed_size;
+		uint32_t uncompressed_size;
+		uint32_t unknown2;
+		uint32_t timestamp;
+		uint32_t offset;
+	};
+	struct Archive{
+		char magic[10];
+		uint16_t value; //0x001a
+		std::vector<ArchiveEntry> entries;
+		void read( ByteViewReader& reader ){
+			reader.readData<char>(magic, 10);
+			value = reader.read16u();
+			//TODO: Check validity
+			reader.readVector(entries, reader.read32u());
+		}
+	};
+	
 	struct Matrix{
 		float values[4][4];
 	};
@@ -137,15 +165,11 @@ namespace Falcom{
 			char name[256];
 			uint32_t unknown1;
 			uint32_t vertex_size;
-			uint32_t texture_count;
 			
 			std::vector<TexRef> texture_refferences;
 			std::vector<TextureV1> textures;
 			
-			uint32_t vertices_count;
 			std::vector<Vertex> vertices;
-			
-			uint32_t edge_count;
 			std::vector<uint16_t> edges;
 			
 			float unknown3[10];
@@ -156,28 +180,37 @@ namespace Falcom{
 				unknown1 = reader.read32u();
 				vertex_size = reader.read32u();
 				
-				texture_count = reader.read32u();
+				auto texture_count = reader.read32u();
 				if( version >= 2 )
 					reader.readVector( texture_refferences, texture_count );
 				else
 					reader.readVector( textures, texture_count );
 				
-				vertices_count = reader.read32u();
+				auto vertices_count = reader.read32u();
 				if (vertex_size != 40)
 				{
-					std::cout << "Does not yet support files with vertex_size == 48\n";
+					std::cout << "Does not yet support files with vertex_size == " << vertex_size << "\n";
 					std::exit(-1);
 				}
 				reader.readVector( vertices, vertices_count );
 				
-				edge_count = reader.read32u();
+				auto edge_count = reader.read32u();
 				reader.readVector( edges, edge_count );
 				
 				reader.readData<float>( unknown3, 10 );
 				unknown11 = reader.read32u();
-				std::cout << "Mesh unknown: " << unknown11 << std::endl;
-				if (unknown11 > 0)
+				if (unknown11 > 0){
+					std::cout << "Mesh unknown: " << unknown11 << std::endl;
 					reader.read(4 * unknown11 * 26);
+				}
+			}
+			
+			void debug( int level ){
+				if( unknown1 != 466 ){
+					for( int i=0; i<level; i++ )
+						std::cout << "\t";
+					std::cout << "Mesh: " << name << " (" << unknown1 << ")\n";
+				}
 			}
 	};
 	
@@ -253,6 +286,16 @@ namespace Falcom{
 				for( auto& child : children )
 					child.read( reader, version );
 			}
+			
+			void debug( int level ){
+				for( int i=0; i<level; i++ )
+					std::cout << "\t";
+				std::cout << "Frame: " << name << " (" << meshes.size() << " meshes)\n";
+				for( auto& mesh : meshes )
+					mesh.debug( level + 1 );
+				for( auto& child : children )
+					child.debug( level + 1 );
+			}
 	};
 	class Model{
 		public:
@@ -266,6 +309,12 @@ namespace Falcom{
 		std::vector<SubModel> frames;
 		
 		Model( Buffer data );
+		
+		void debug(){
+			std::cout << "Model with " << frames.size() << " roots:\n";
+			for( auto& frame : frames )
+				frame.debug( 0 );
+		}
 	};
 }
 
@@ -420,26 +469,25 @@ class Model{
 				z_max = std::max(z_max, v.z);
 			}
 		}
-		void offset(float x, float y, float z){
+		void offset(float x, float y, float z, float scale){
 			for(auto& v : vertices){
 				v.x += x;
 				v.y += y;
 				v.z += z;
-				auto m = std::max(std::abs(x), std::max(std::abs(y), std::abs(z)));
-				v.x /= m;
-				v.y /= m;
-				v.z /= m;
+				v.x /= scale;
+				v.y /= scale;
+				v.z /= scale;
 			}
 		}
 };
 
 void Model::addMesh( const Falcom::Mesh& input ){
-	faces.reserve( faces.size() + input.edge_count/3 );
-	for( unsigned i=0; i < input.edge_count/3; i++ )
+	faces.reserve( faces.size() + input.edges.size()/3 );
+	for( unsigned i=0; i < input.edges.size()/3; i++ )
 		faces.emplace_back( input.edges[i*3+0], input.edges[i*3+1], input.edges[i*3+2] );
 	
-	vertices.reserve( vertices.size() + input.vertices_count );
-	for( unsigned i=0; i < input.vertices_count; i++ ){
+	vertices.reserve( vertices.size() + input.vertices.size() );
+	for( unsigned i=0; i < input.vertices.size(); i++ ){
 		Vertex v;
 		v.id = i;
 		v.x = input.vertices[i].x;
@@ -556,17 +604,14 @@ void APIENTRY glDebugOutput(GLenum source,
 constexpr int window_width = 1920;
 constexpr int window_height = 1080;
 int main( int argc, char* argv[] ){
-	if( argc != 2 ){
-		std::cout << "Wrong amount of parameters\n";
-		return -1;
-	}
+	if( argc != 2 )
+		return error( "Wrong amount of parameters" );
 	Falcom::Model xx( File( argv[1], "rb" ).readAll() );
+	xx.debug();
 	
 	// Initialise GLFW
-	if( !glfwInit() ){
-		fprintf( stderr, "Failed to initialize GLFW\n" );
-		return -1;
-	} 
+	if( !glfwInit() )
+		return error( "Failed to initialize GLFW" );
 	
 	glfwWindowHint(GLFW_SAMPLES, 4); // 4x antialiasing
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4); // OpenGl 4.3 needed for debug context
@@ -578,19 +623,15 @@ int main( int argc, char* argv[] ){
 	//Debug context
 	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
 	// Open a window and create its OpenGL context
-	GLFWwindow* window; // (In the accompanying source code, this variable is global)
-	window = glfwCreateWindow( window_width, window_height, "TrailsViewer", NULL, NULL);
-	if( window == NULL ){
-		fprintf( stderr, "Failed to open GLFW window. If you have an Intel GPU, they are not 3.3 compatible. Try the 2.1 version of the tutorials.\n" );
+	auto* window = glfwCreateWindow( window_width, window_height, "TrailsViewer", NULL, NULL);
+	if( !window ){
 		glfwTerminate();
-		return -1;
+		return error( "Couldn't open GLFW window" );
 	}
 	glfwMakeContextCurrent(window); // Initialize GLEW
-	glewExperimental=true; // Needed in core profile
-	if( glewInit() != GLEW_OK ){
-		fprintf(stderr, "Failed to initialize GLEW\n");
-		return -1;
-	}
+	glewExperimental = true; // Needed in core profile
+	if( glewInit() != GLEW_OK )
+		return error( "Failed to initialize GLEW" );
 	
 	GLint flags; glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
 	if (flags & GL_CONTEXT_FLAG_DEBUG_BIT)
@@ -622,30 +663,20 @@ int main( int argc, char* argv[] ){
 	
 	std::vector<Model> models;
 	getMeshes( xx, models );
-//	auto model_copy = models[2];
-//	models.clear();
-//	models.push_back(model_copy);
-	std::cout << "Amount of models: " << models.size() << std::endl;
-	
-	float x_min=std::numeric_limits<float>::max(), x_max=std::numeric_limits<float>::min();
-	float y_min=x_min, y_max=x_max;
-	float z_min=x_min, z_max=x_max;
+	struct MinMax{
+		float min {std::numeric_limits<float>::max()};
+		float max {std::numeric_limits<float>::min()};
+		auto range() { return (max-min); }
+		auto offset() { return -(min + range()/2); }
+	} x, y, z;
 	for( auto& model : models )
-		model.find_boundaries(x_min, y_min, z_min, x_max, y_max, z_max);
+		model.find_boundaries(x.min, y.min, z.min, x.max, y.max, z.max);
+	auto scale = std::max(x.range(), std::max(y.range(), z.range()));
 	for( auto& model : models )
-		model.offset(-(x_max-x_min)/2, -(y_max-y_min)/2, -(z_max-z_min)/2);
+		model.offset(x.offset(), y.offset(), z.offset(), scale);
 	for( auto& model : models ){
 		GlModel m;
 		model.addFaces( m.vertices, m.uvs );
-		for( size_t x =0; x<m.vertices.size()/3; x++ ){
-			auto v = m.vertices.data() + x*3;
-			x_min = std::min(x_min, v[0]);
-			y_min = std::min(y_min, v[1]);
-			z_min = std::min(z_min, v[2]);
-			x_max = std::max(x_max, v[0]);
-			y_max = std::max(y_max, v[1]);
-			z_max = std::max(z_max, v[2]);
-		}
 		
 		glGenBuffers(1, &m.vertexbuffer);
 		glBindBuffer(GL_ARRAY_BUFFER, m.vertexbuffer);
@@ -675,14 +706,12 @@ int main( int argc, char* argv[] ){
 	//Set up a perspective view. This is needed for depth testing to work
 	glm::perspective(glm::radians(45.0f), (float)window_width/(float)window_height, -0.1f, 2000.0f);
 
-	//GLfloat i = 0;
-	
 	bool exit_program = false;
 	double old_xpos = 0, old_ypos = 0;
 	glfwGetCursorPos(window, &old_xpos, &old_ypos);
-	float rot_x = 0, rot_y = 0;
+	float rot_x = 0.3, rot_y = -0.1, rot_z = 0;
 	float mov_x = 0, mov_y = 0, mov_z = 0;
-	float scale = 1.0;
+	float view_scale = 1.0;
 	do{
 		//Get mouse movement
 		double xpos = 0, ypos = 0;
@@ -702,7 +731,7 @@ int main( int argc, char* argv[] ){
 		else if( glfwGetKey(window, GLFW_KEY_LEFT_CONTROL ) == GLFW_PRESS )
 		{
 			auto dist = dx / 10.f;
-			scale *= 1.0 - dist;
+			view_scale *= 1.0 - dist;
 		}
 		else if( glfwGetKey(window, GLFW_KEY_LEFT_ALT ) == GLFW_PRESS )
 		{
@@ -717,9 +746,10 @@ int main( int argc, char* argv[] ){
 		
 		glm::mat4 MVP{ 1 };
 		MVP = glm::translate( MVP, glm::vec3(mov_x, mov_y, mov_z) );
-		MVP = glm::scale( MVP, glm::vec3(scale, scale, scale) );
+		MVP = glm::scale( MVP, glm::vec3(view_scale, view_scale, view_scale) );
 		MVP = glm::rotate( MVP, rot_x, glm::vec3(0,1,0) );
 		MVP = glm::rotate( MVP, rot_y, glm::vec3(1,0,1) );
+		MVP = glm::rotate( MVP, rot_z, glm::vec3(0,0,1) );
 	
 		glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -774,9 +804,7 @@ int main( int argc, char* argv[] ){
 		// Swap buffers
 		glfwSwapBuffers(window);
 		glfwPollEvents();
-		
-		//i += 0.002;
-	} // Check if the window was closed
+	}
 	while( !exit_program && glfwWindowShouldClose(window) == 0 );
 	
 	return 0;
