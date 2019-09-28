@@ -671,8 +671,8 @@ int main( int argc, char* argv[] ){
 	} x, y, z;
 	for( auto& model : models )
 		model.find_boundaries(x.min, y.min, z.min, x.max, y.max, z.max);
-	auto scale = std::max(x.range(), std::max(y.range(), z.range()));
-	for( auto& model : models )
+	auto scale = 1.0;//std::max(x.range(), std::max(y.range(), z.range()));
+	for( auto& model : models ) //TODO: Move this to modelMat
 		model.offset(x.offset(), y.offset(), z.offset(), scale);
 	for( auto& model : models ){
 		GlModel m;
@@ -693,6 +693,8 @@ int main( int argc, char* argv[] ){
 	
 	// Get uniforms
 	GLuint MatrixID = glGetUniformLocation(programID, "MVP");
+	GLuint ProjectionID = glGetUniformLocation(programID, "projection");
+	GLuint ModelMatID = glGetUniformLocation(programID, "model");
 	GLuint TextureID  = glGetUniformLocation(programID, "myTextureSampler");
 	
 	GLuint VertexArrayID;
@@ -702,9 +704,8 @@ int main( int argc, char* argv[] ){
 	// Enable depth test
 	glEnable(GL_DEPTH_TEST);
 	glDepthMask(GL_TRUE);
-	glEnable(GL_DEPTH_CLAMP);
+	//glEnable(GL_DEPTH_CLAMP);
 	//Set up a perspective view. This is needed for depth testing to work
-	glm::perspective(glm::radians(45.0f), (float)window_width/(float)window_height, -0.1f, 2000.0f);
 
 	bool exit_program = false;
 	double old_xpos = 0, old_ypos = 0;
@@ -712,7 +713,21 @@ int main( int argc, char* argv[] ){
 	float rot_x = 0.3, rot_y = -0.1, rot_z = 0;
 	float mov_x = 0, mov_y = 0, mov_z = 0;
 	float view_scale = 1.0;
+	float yaw = 0, pitch = 0;
+	glm::vec3 cameraPos   = glm::vec3(0.0f, 0.0f,  0.0f);
+	glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+	glm::vec3 cameraUp    = glm::vec3(0.0f, 1.0f,  0.0f);
+	{
+			glm::vec3 front;
+			front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+			front.y = sin(glm::radians(pitch));
+			front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+			cameraFront = glm::normalize(front);
+	}
 	do{
+		auto projection = glm::perspective(glm::radians(45.0f), (float)window_width/(float)window_height, 0.1f, 1000.f);
+		glm::mat4 modelMat = glm::scale( glm::mat4(1.0f), glm::vec3(-1, 1, 1) ); //Fix view getting mirroed for unknown reasons
+	
 		//Get mouse movement
 		double xpos = 0, ypos = 0;
 		double dx, dy;
@@ -725,11 +740,23 @@ int main( int argc, char* argv[] ){
 		
 		if( glfwGetKey(window, GLFW_KEY_LEFT_SHIFT ) == GLFW_PRESS )
 		{
+			cameraPos += cameraFront * (float(dy) / 100.f);
+			cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * (float(dx) / 100.f);
 			mov_x += dx / 100.f;
 			mov_y += dy / 100.f;
 		}
 		else if( glfwGetKey(window, GLFW_KEY_LEFT_CONTROL ) == GLFW_PRESS )
 		{
+			yaw += dx / 10.f;
+			pitch += dy / 10.f;
+			pitch = std::max( -89.f, std::min(pitch, 89.f) );
+
+			glm::vec3 front;
+			front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+			front.y = sin(glm::radians(pitch));
+			front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+			cameraFront = glm::normalize(front);
+			
 			auto dist = dx / 10.f;
 			view_scale *= 1.0 - dist;
 		}
@@ -738,18 +765,22 @@ int main( int argc, char* argv[] ){
 			rot_x += dx / 300.f;
 			rot_y += dy / 300.f;
 		}
+		modelMat = glm::translate( modelMat, glm::vec3( rot_x, 0.f, rot_y ) );
 		
 		//Close the program when pressing Esc
 		if( glfwGetKey(window, GLFW_KEY_ESCAPE ) == GLFW_PRESS )
 			exit_program = true;
 		
-		
+		/*
 		glm::mat4 MVP{ 1 };
 		MVP = glm::translate( MVP, glm::vec3(mov_x, mov_y, mov_z) );
 		MVP = glm::scale( MVP, glm::vec3(view_scale, view_scale, view_scale) );
 		MVP = glm::rotate( MVP, rot_x, glm::vec3(0,1,0) );
 		MVP = glm::rotate( MVP, rot_y, glm::vec3(1,0,1) );
 		MVP = glm::rotate( MVP, rot_z, glm::vec3(0,0,1) );
+		/*/
+		auto MVP = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+		//*/
 	
 		glClearColor(0.0f, 0.0f, 0.4f, 0.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -787,6 +818,8 @@ int main( int argc, char* argv[] ){
 			// Use our shader
 			glUseProgram(programID);
 			glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
+			glUniformMatrix4fv(ProjectionID, 1, GL_FALSE, &projection[0][0]);
+			glUniformMatrix4fv(ModelMatID, 1, GL_FALSE, &modelMat[0][0]);
 			
 			
 			glActiveTexture(GL_TEXTURE0);
