@@ -600,6 +600,82 @@ void APIENTRY glDebugOutput(GLenum source,
     std::cout << std::endl;
 }
 
+class MtlHandler{
+private:
+	FILE* file = nullptr;
+	std::string path;
+	
+public:
+	MtlHandler(std::string path) : path(path){
+		file = fopen(path.c_str(), "a");
+	}
+	~MtlHandler(){ fclose(file); }
+	
+	std::string pathToId( std::string name ){
+		std::replace(name.begin(), name.end(), '.', '_' );
+		return name;
+	}
+	
+	void writeRef( FILE* parent ){
+		fprintf(parent, "mtllib %s\n", path.c_str());
+	}
+	
+	void useTexture( FILE* parent, Falcom::Texture& tex ){
+		fprintf(parent, "usemtl %s\n", pathToId(tex.name).c_str());
+	}
+	
+	void writeTexture( std::string name ){
+		auto path = name.substr(0, name.size()-4) + ".png";
+		fprintf(file, "newmtl %s\n", pathToId( name ).c_str() );
+		fprintf(file, "d 1.0\n");
+		fprintf(file, "illum 2\n");
+		fprintf(file, "map_Kd -s 1.0 -1.0 1.0 images\\\\%s\n", path.c_str());
+		fprintf(file, "map_d -s 1.0 -1.0 1.0 images\\\\%s\n\n", path.c_str());
+	}
+};
+
+void writeMeshToObj( std::string path, int count, MtlHandler& handler, Falcom::SubModel& parent, Falcom::Mesh& mesh, int& vertex_offset ){
+	auto* file = fopen(path.c_str(), "a");
+	if( !file )
+		return;
+
+	static bool has_written = false;
+	if (!has_written)
+		handler.writeRef( file );
+	has_written = true;
+	
+	fprintf(file, "o %s_%d\n", mesh.name, count);
+	
+	for( auto v : mesh.vertices ){
+		fprintf(file, "v %f %f %f\n", v.x, v.y, v.z);
+	}
+	for( auto v : mesh.vertices ){
+		fprintf(file, "vt %f %f\n", v.u, v.v);
+	}
+
+	for( auto& texref : mesh.texture_refferences ){
+		handler.useTexture( file, parent.textures[texref.id] );
+		for( auto i=0; i<texref.edge_count; i++ ){
+			auto* edge = mesh.edges.data() + (i+texref.edge_start)*3;
+			fprintf(file, "f %d/%d %d/%d %d/%d\n", vertex_offset+edge[0]+1, vertex_offset+edge[0]+1, vertex_offset+edge[1]+1, vertex_offset+edge[1]+1, vertex_offset+edge[2]+1, vertex_offset+edge[2]+1);
+		}
+	}
+	
+	vertex_offset += mesh.vertices.size();
+	
+	
+	fclose( file );
+}
+void writeMeshToObj( Falcom::SubModel& model, MtlHandler& handler, int& count, int& vertex_offset ){
+	for( auto& tex : model.textures )
+		handler.writeTexture( tex.name );
+	
+	for( auto& mesh : model.meshes ){
+		writeMeshToObj( std::string("mesh") /*+ std::to_string(count++)*/ + ".obj", count++, handler, model, mesh, vertex_offset );
+	}
+	for( auto& child : model.children )
+		writeMeshToObj( child, handler, count, vertex_offset );
+}
 
 constexpr int window_width = 1920;
 constexpr int window_height = 1080;
@@ -608,6 +684,12 @@ int main( int argc, char* argv[] ){
 		return error( "Wrong amount of parameters" );
 	Falcom::Model xx( File( argv[1], "rb" ).readAll() );
 	xx.debug();
+	
+	int count = 0, vertex_offset = 0;
+	MtlHandler mtl_handler( "textures.mtl");
+	for( auto& frame : xx.frames )
+		writeMeshToObj( frame, mtl_handler, count, vertex_offset );
+	
 	
 	// Initialise GLFW
 	if( !glfwInit() )
