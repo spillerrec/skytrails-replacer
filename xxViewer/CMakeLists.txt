@@ -27,6 +27,7 @@ set(SOURCE_UTILS
 
 add_executable(trailsViewer ${SOURCE_CORE} ${SOURCE_UTILS})
 
+
 # Set-up libraries
 
 target_link_libraries(trailsViewer -lopengl32 -lglfw3 -lglew32 -lpng)

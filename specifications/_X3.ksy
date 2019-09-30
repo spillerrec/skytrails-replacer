@@ -142,18 +142,33 @@ types:
         type: str
         size: 256
         encoding: UTF-8
+      #TODO: Check for the other maps  
       - id:  unknown2
         size: 104
   texture:
     seq:
-      - id: unknown
-        size: 72
+      - id: unknown1 #Appears to be a single bit
+        type: u4le
+      - id: unknown_floats
+        type: f4le
+        repeat: expr
+        repeat-expr: 16
+      - id: unknown3
+        type: u4le #Unknown format, sometimes 52.1 float
       - id: name
         type: str
-        size: 256
+        size: 204 # This is not confirmed, but due to the random data hard to verify
+        encoding: UTF-8
+      - id: bump
+        type: str
+        size: 204
+        encoding: UTF-8
+      - id: reflection
+        type: str
+        size: 204
         encoding: UTF-8
       - id:  unknown2
-        size: 524
+        size: 168
         
   texture_ref:
     seq:
@@ -216,8 +231,8 @@ types:
         size: 256
         encoding: UTF-8
         
-      - id: unknown1
-        type: u4le
+      - id: magic
+        contents: [0xD2, 0x01, 0x00, 0x00] #Always 466 / 0x000001D2
         
       - id: vertice_size
         type: u4le
