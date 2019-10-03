@@ -28,6 +28,14 @@ seq:
     
     
 types:
+  vec3:
+    seq:
+      - id: x
+        type: f4le
+      - id: y
+        type: f4le
+      - id: z
+        type: f4le  
   bone:
     seq:
       - id: name
@@ -191,18 +199,10 @@ types:
         
   vertex:
     seq:
-      - id: x
-        type: f4le
-      - id: y
-        type: f4le
-      - id: z
-        type: f4le
-      - id: normal_x
-        type: f4le
-      - id: normal_y
-        type: f4le
-      - id: normal_z
-        type: f4le
+      - id: pos
+        type: vec3
+      - id: normal
+        type: vec3
       - id: unknown1
         type: f4le
       - id: unknown2
@@ -275,17 +275,12 @@ types:
         repeat: expr
         repeat-expr: edge_count
         
-      - id: unknown2
-        type: f4le
-      - id: unknown3
-        type: f4le
-      - id: unknown4
-        type: f4le
-        
-      - id: unknown5
-        type: f4le
-        repeat: expr
-        repeat-expr: 6
+      - id: min_pos
+        type: vec3
+      - id: max_pos
+        type: vec3
+      - id: avg_pos # Just the average of the min and max values apparently
+        type: vec3
         
       - id: unknown6
         type: f4le
