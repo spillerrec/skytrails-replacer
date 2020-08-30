@@ -37,6 +37,16 @@ class ByteViewReader{
 			return ByteView( buffer.begin() + from, amount );
 		}
 		
+		bool findNextMatch(ConstByteView str){
+			while(left() > str.size()){
+				if (buffer.subView(position, str.size()) == str)
+					return true;
+				read8u();
+			}
+			
+			return false; //Nothing found
+		}
+		
 		ByteView read( unsigned amount ){
 			if( amount > left() )
 				throw std::runtime_error( "ByteViewReader: Ran out of file" );

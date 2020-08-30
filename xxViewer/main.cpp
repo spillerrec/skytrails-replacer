@@ -278,7 +278,7 @@ namespace Falcom{
 					std::cout << "Warning: unknown1 == 1\n";
 				}
 				
-				if (mesh_count == 0 && unknown1 == 0)
+				if (unknown1 == 0)
 					random_padding = reader.read( 48 );
 				
 				children_count = reader.read16u();
@@ -287,10 +287,19 @@ namespace Falcom{
 					child.read( reader, version );
 			}
 			
+			int totalChildren() const{
+				int sum = children_count;
+				for( auto& child : children )
+					sum += child.totalChildren();
+				return sum;
+			}
+			
 			void debug( int level ){
-				for( int i=0; i<level; i++ )
-					std::cout << "\t";
-				std::cout << "Frame: " << name << " (" << meshes.size() << " meshes)\n";
+				for( int i=0; i<level-1; i++ )
+					std::cout << "| ";
+				if( level > 0 )
+					std::cout << "|--";
+				std::cout << /*"Frame: " <<*/ name << " (" << meshes.size() << " meshes)\n";
 				for( auto& mesh : meshes )
 					mesh.debug( level + 1 );
 				for( auto& child : children )
@@ -305,15 +314,47 @@ namespace Falcom{
 		uint8_t version;
 		ByteView unknown1; //bytes 46
 		uint16_t children_count;
+		ByteView remainder;
 		
 		std::vector<SubModel> frames;
 		
 		Model( Buffer data );
 		
+		std::vector<int> scanForFrames(){
+			ByteViewReader readFrames( data );
+			std::vector<int> positions;
+			uint8_t key[5] = {'F', 'r', 'a', 'm', 'e'}; 
+			while(readFrames.findNextMatch(ConstByteView(key, 5))){
+				positions.push_back(readFrames.tell());
+				readFrames.read(256);
+			}
+			return positions;
+		}
+		void dumpFrames(){
+			auto positions = scanForFrames();
+			for (int i=0; i<(int)positions.size(); i++){
+				auto start = positions[i];
+				auto end = (i != positions.size()-1) ? positions[i+1] : data.view().size();
+				auto frame_data = data.view().subView(start, end-start);
+				
+				std::cout << "Dumping frame " << i << " at: " << start << std::endl;
+				auto file = fopen(("dump" + std::to_string(i) + ".frame").c_str(), "wb");
+				fwrite(frame_data.begin(), 1, frame_data.size(), file);
+				fclose(file);
+			}
+		}
+		
 		void debug(){
 			std::cout << "Model with " << frames.size() << " roots:\n";
 			for( auto& frame : frames )
 				frame.debug( 0 );
+			
+			int childrenTotal = 0;
+			for( auto& frame : frames )
+				childrenTotal += 1 + frame.totalChildren();
+			std::cout << "Read frames " << childrenTotal << " vs. " << scanForFrames().size() << " expected\n";
+			
+			std::cout << "Bytes left in file: " << remainder.size() << std::endl;
 		}
 	};
 }
@@ -332,6 +373,7 @@ Falcom::Model::Model( Buffer data_1 ) : data( data_1 ){
 		frames.resize( children_count );
 		for( auto& frame : frames )
 			frame.read( reader, version );
+		remainder = reader.read(reader.left());
 	}
 	catch( ... )
 	{
@@ -375,6 +417,7 @@ class TextureHandler{
 					
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+					glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 8.f);
 					
 					glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.get_width(), image.get_height(), 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer.get());
 					
@@ -629,8 +672,7 @@ public:
 		fprintf(file, "newmtl %s\n", pathToId( name ).c_str() );
 		fprintf(file, "d 1.0\n");
 		fprintf(file, "illum 2\n");
-		fprintf(file, "map_Kd -s 1.0 -1.0 1.0 images\\\\%s\n", path.c_str());
-		fprintf(file, "map_d -s 1.0 -1.0 1.0 images\\\\%s\n\n", path.c_str());
+		fprintf(file, "map_Kd images\\\\%s\n\n", path.c_str());
 	}
 };
 
@@ -650,7 +692,7 @@ void writeMeshToObj( std::string path, int count, MtlHandler& handler, Falcom::S
 		fprintf(file, "v %f %f %f\n", v.x, v.y, v.z);
 	}
 	for( auto v : mesh.vertices ){
-		fprintf(file, "vt %f %f\n", v.u, v.v);
+		fprintf(file, "vt %f %f\n", v.u, 1.0-v.v);
 	}
 
 	for( auto& texref : mesh.texture_refferences ){
@@ -686,15 +728,16 @@ int main( int argc, char* argv[] ){
 	xx.debug();
 	
 	int count = 0, vertex_offset = 0;
-	MtlHandler mtl_handler( "textures.mtl");
-	for( auto& frame : xx.frames )
-		writeMeshToObj( frame, mtl_handler, count, vertex_offset );
+	//MtlHandler mtl_handler( "textures.mtl");
+	//for( auto& frame : xx.frames )
+	//	writeMeshToObj( frame, mtl_handler, count, vertex_offset );
 	
 	
 	// Initialise GLFW
 	if( !glfwInit() )
 		return error( "Failed to initialize GLFW" );
 	
+	glEnable( GL_MULTISAMPLE );
 	glfwWindowHint(GLFW_SAMPLES, 4); // 4x antialiasing
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4); // OpenGl 4.3 needed for debug context
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
