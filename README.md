@@ -1,10 +1,11 @@
 # skytrails-replacer
 Attempt on reverse engineering the Trails in the Sky 3D model files so they can be replaced with higher quality models
 
-
 ### xxViewer
 
-Decoder and viewer for _X3 files from Second Chapter. First Chapter support will probably come soon
+![Example screenshot](/preview.jpg?raw=true)
+
+Decoder and viewer for `X` files from First Chapter and `_X3` files from Second Chapter.
 
 **Compile**
 Run `cmake .` followed by `make`.
@@ -20,6 +21,19 @@ Run `cmake .` followed by `make`.
 `./trailsViewer INPUT_X3_FILE`
 
 Or simply drag-and-drop a file onto the executable. A folder called `images` should exist in the working directory and contain the game images in PNG format. Use the option in `falcnvrt` to generate the PNG files.
+To move around in the scene, hold CTRL or SHIFT while moving the mouse to rotate/zoom.
+
+### Progress / Support
+
+Files from First and Second chapter works.
+
+This is done without searching for markers in the files which is the approch used in all other avaiable code. The structure is fully parsed though a lot about the format is still not understood. Some of the conditions might be incorrect.
+
+Most of the files not working yet are containing what looks like bone data.
+
+- First chapter: 926 of 952 files parses (97.3%)
+- Second chapter: 1552 of 1598 files parses (97.1%)
+- Third chapter: Unknown
 
 ### specifications
 
