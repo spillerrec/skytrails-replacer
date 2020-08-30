@@ -28,6 +28,14 @@ seq:
     
     
 types:
+  vec3:
+    seq:
+      - id: x
+        type: f4le
+      - id: y
+        type: f4le
+      - id: z
+        type: f4le  
   bone:
     seq:
       - id: name
@@ -142,18 +150,33 @@ types:
         type: str
         size: 256
         encoding: UTF-8
+      #TODO: Check for the other maps  
       - id:  unknown2
         size: 104
   texture:
     seq:
-      - id: unknown
-        size: 72
+      - id: unknown1 #Appears to be a single bit
+        type: u4le
+      - id: unknown_floats
+        type: f4le
+        repeat: expr
+        repeat-expr: 16
+      - id: unknown3
+        type: u4le #Unknown format, sometimes 52.1 float
       - id: name
         type: str
-        size: 256
+        size: 204 # This is not confirmed, but due to the random data hard to verify
+        encoding: UTF-8
+      - id: bump
+        type: str
+        size: 204
+        encoding: UTF-8
+      - id: reflection
+        type: str
+        size: 204
         encoding: UTF-8
       - id:  unknown2
-        size: 524
+        size: 168
         
   texture_ref:
     seq:
@@ -176,18 +199,10 @@ types:
         
   vertex:
     seq:
-      - id: x
-        type: f4le
-      - id: y
-        type: f4le
-      - id: z
-        type: f4le
-      - id: normal_x
-        type: f4le
-      - id: normal_y
-        type: f4le
-      - id: normal_z
-        type: f4le
+      - id: pos
+        type: vec3
+      - id: normal
+        type: vec3
       - id: unknown1
         type: f4le
       - id: unknown2
@@ -216,8 +231,8 @@ types:
         size: 256
         encoding: UTF-8
         
-      - id: unknown1
-        type: u4le
+      - id: magic
+        contents: [0xD2, 0x01, 0x00, 0x00] #Always 466 / 0x000001D2
         
       - id: vertice_size
         type: u4le
@@ -260,17 +275,12 @@ types:
         repeat: expr
         repeat-expr: edge_count
         
-      - id: unknown2
-        type: f4le
-      - id: unknown3
-        type: f4le
-      - id: unknown4
-        type: f4le
-        
-      - id: unknown5
-        type: f4le
-        repeat: expr
-        repeat-expr: 6
+      - id: min_pos
+        type: vec3
+      - id: max_pos
+        type: vec3
+      - id: avg_pos # Just the average of the min and max values apparently
+        type: vec3
         
       - id: unknown6
         type: f4le

@@ -17,6 +17,7 @@ using namespace glm;
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <set>
 #include <vector>
 
 #include "glsl-fragment.h"
@@ -111,9 +112,12 @@ namespace Falcom{
 		float values[4][4];
 	};
 	struct Texture{
-		uint8_t unknown[72];
-		char name[256];
-		uint8_t unknown2[524];
+		uint32_t unknown1;
+		float matrix[16];
+		uint32_t unknown2;
+		char name[204];
+		char bumpmap[204];
+		uint32_t unknown3[93];
 	};
 	struct TextureV1{
 		uint32_t edge_start;
@@ -305,6 +309,21 @@ namespace Falcom{
 				for( auto& child : children )
 					child.debug( level + 1 );
 			}
+		
+			template<typename Func>
+			void forEachFrame(Func f){
+				f(*this);
+				for(auto& frame : children)
+					frame.forEachFrame(f);
+			}
+			
+			template<typename Func>
+			void forEachMesh(Func f){
+				for(auto& mesh : meshes)
+					f(mesh);
+				for(auto& frame : children)
+					frame.forEachMesh(f);
+			}
 	};
 	class Model{
 		public:
@@ -355,6 +374,18 @@ namespace Falcom{
 			std::cout << "Read frames " << childrenTotal << " vs. " << scanForFrames().size() << " expected\n";
 			
 			std::cout << "Bytes left in file: " << remainder.size() << std::endl;
+		}
+		
+		template<typename Func>
+		void forEachFrame(Func f){
+			for(auto& frame : frames)
+				frame.forEachFrame(f);
+		}
+		
+		template<typename Func>
+		void forEachMesh(Func f){
+			for(auto& frame : frames)
+				frame.forEachMesh(f);
 		}
 	};
 }
@@ -719,6 +750,25 @@ void writeMeshToObj( Falcom::SubModel& model, MtlHandler& handler, int& count, i
 		writeMeshToObj( child, handler, count, vertex_offset );
 }
 
+template<typename T>
+class Statistics{
+private:
+	std::set<T> items;
+	
+public:
+	void add(T val){ items.insert( val ); }
+	
+	void evaluate(std::string msg){
+		if( items.size() == 1 && *items.begin() == T() )
+			return;
+		
+		std::cout << msg << ": ";
+		for(auto val : items)
+			std::cout << val << ", ";
+		std::cout << std::endl;
+	}
+};
+
 constexpr int window_width = 1920;
 constexpr int window_height = 1080;
 int main( int argc, char* argv[] ){
@@ -727,10 +777,32 @@ int main( int argc, char* argv[] ){
 	Falcom::Model xx( File( argv[1], "rb" ).readAll() );
 	xx.debug();
 	
-	int count = 0, vertex_offset = 0;
-	//MtlHandler mtl_handler( "textures.mtl");
-	//for( auto& frame : xx.frames )
-	//	writeMeshToObj( frame, mtl_handler, count, vertex_offset );
+	constexpr size_t stat_amount = 93;
+	for(size_t i=0; i<stat_amount; i++){
+		Statistics<float> stats;
+		xx.forEachFrame([&](auto& frame){
+			for(auto& tex : frame.textures)
+				stats.add(tex.unknown3[i]);
+		});
+		stats.evaluate("Texture.unknown" + std::to_string(i));
+	}
+	{
+		Statistics<uint32_t> stats1;
+		Statistics<float> stats2;
+		xx.forEachFrame([&](auto& frame){
+			for(auto& tex : frame.textures){
+				stats1.add(tex.unknown1);
+				stats2.add(tex.unknown2);
+			}
+		});
+		stats1.evaluate("Texture.first");
+		stats2.evaluate("Texture.second");
+	}
+	
+//	int count = 0, vertex_offset = 0;
+//	MtlHandler mtl_handler( "textures.mtl");
+//	for( auto& frame : xx.frames )
+//		writeMeshToObj( frame, mtl_handler, count, vertex_offset );
 	
 	
 	// Initialise GLFW
