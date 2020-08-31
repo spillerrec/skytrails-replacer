@@ -214,13 +214,21 @@ types:
         
   vertex2:
     seq:
-      - id: base
-        type: vertex
-        
+      - id: pos
+        type: vec3
+      - id: normal
+        type: vec3
       - id: unknown1
         type: f4le
-        
       - id: unknown2
+        type: f4le
+      - id: unknown3
+        type: f4le
+      - id: unknown4
+        type: f4le
+      - id: u
+        type: f4le
+      - id: v
         type: f4le
   bonedata1:
     seq:

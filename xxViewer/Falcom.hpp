@@ -112,8 +112,8 @@ namespace Falcom{
 		float x, y, z;
 		float normal_x, normal_y, normal_z;
 		float unknown1, unknown2;
-		float u, v;
 		float unknown3, unknown4;
+		float u, v;
 	};
 	class Mesh{
 		public:

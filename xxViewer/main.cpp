@@ -234,16 +234,32 @@ void Model::addMesh( const Falcom::Mesh& input ){
 	for( unsigned i=0; i < input.edges.size()/3; i++ )
 		faces.emplace_back( input.edges[i*3+0], input.edges[i*3+1], input.edges[i*3+2] );
 	
-	vertices.reserve( vertices.size() + input.vertices.size() );
-	for( unsigned i=0; i < input.vertices.size(); i++ ){
-		Vertex v;
-		v.id = i;
-		v.x = input.vertices[i].x;
-		v.y = input.vertices[i].y;
-		v.z = input.vertices[i].z;
-		v.u = input.vertices[i].u;
-		v.v = input.vertices[i].v;
-		vertices.emplace_back( v );
+	if( input.vertices.size() > input.vertices48.size() ){
+		
+		vertices.reserve( vertices.size() + input.vertices.size() );
+		for( unsigned i=0; i < input.vertices.size(); i++ ){
+			Vertex v;
+			v.id = i;
+			v.x = input.vertices[i].x;
+			v.y = input.vertices[i].y;
+			v.z = input.vertices[i].z;
+			v.u = input.vertices[i].u;
+			v.v = input.vertices[i].v;
+			vertices.emplace_back( v );
+		}
+	}
+	else{
+		vertices.reserve( vertices.size() + input.vertices.size() );
+		for( unsigned i=0; i < input.vertices48.size(); i++ ){
+			Vertex v;
+			v.id = i;
+			v.x = input.vertices48[i].x;
+			v.y = input.vertices48[i].y;
+			v.z = input.vertices48[i].z;
+			v.u = input.vertices48[i].u;
+			v.v = input.vertices48[i].v;
+			vertices.emplace_back( v );
+		}
 	}
 };
 
