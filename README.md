@@ -29,10 +29,8 @@ Files from First and Second chapter works.
 
 This is done without searching for markers in the files which is the approch used in all other avaiable code. The structure is fully parsed though a lot about the format is still not understood. Some of the conditions might be incorrect.
 
-Most of the files not working yet are containing what looks like bone data.
-
-- First chapter: 926 of 952 files parses (97.3%)
-- Second chapter: 1552 of 1598 files parses (97.1%)
+- First chapter: 949 of 952 files parses (99.7%)
+- Second chapter: 1598 of 1598 files parses (100%)
 - Third chapter: Unknown
 
 ### specifications

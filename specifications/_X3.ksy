@@ -222,6 +222,33 @@ types:
         
       - id: unknown2
         type: f4le
+  bonedata1:
+    seq:
+      - id: content
+        type: f4le
+        repeat: expr
+        repeat-expr: 16
+  
+  bonedata:
+    seq:
+      - id: count1
+        type: u4le
+      - id: count2
+        type: u4le
+      - id: count3
+        type: u4le
+        
+      - id: unknown1
+        type: bonedata1
+        repeat: expr
+        repeat-expr: count3
+        
+      - id: names
+        type: str
+        size: 256
+        encoding: UTF-8
+        repeat: expr
+        repeat-expr: count3
     
         
   mesh:
@@ -275,6 +302,10 @@ types:
         repeat: expr
         repeat-expr: edge_count
         
+      - id: bones
+        type: bonedata
+        if: vertice_size == 48
+
       - id: min_pos
         type: vec3
       - id: max_pos
@@ -307,8 +338,8 @@ types:
         
   unknown_type2:
     seq:
-      - id: unknown1
-        type: f4le
+      - id: step
+        type: u4le
         
       - id: unknown2
         type: f4le
@@ -321,48 +352,47 @@ types:
         
   unknown_type3:
     seq:
-      - id: unknown1
+      - id: step
         type: u4le
         
       - id: unknown2
-        type: u4le
+        type: f4le
         
       - id: unknown3
-        type: u4le
+        type: f4le
         
       - id: unknown4
-        type: u4le
+        type: f4le
         
       - id: unknown5
         type: f4le
         
   unknown_type:
     seq:
-      - id: unknown1
+      - id: start_a
         type: u4le
-      - id: unknown2
+      - id: end_a
         type: u4le
-      - id: unknown3
+      - id: start_b
         type: u4le
-      - id: unknown4
+      - id: end_b
         type: u4le
-      - id: unknown5
+      - id: start_c
         type: u4le
-        
-      - id: count
+      - id: end_c
         type: u4le
         
       - id: unknown6
         type: u4le
       - id: unknown7
         type: u4le
-      - id: unknown8
+      - id: count
         type: u4le
         
       - id: unknown_block1
         type: unknown_type2
         repeat: expr
-        repeat-expr: unknown8
+        repeat-expr: count
         
       - id: count2
         type: u4le
@@ -426,7 +456,7 @@ types:
         
       - id: padding
         size: 48
-        if: mesh_count == 0 and unknown1 == 0
+        if: unknown1 == 0
         
       - id: count4
         type: u2le

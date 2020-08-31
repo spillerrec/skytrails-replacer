@@ -34,6 +34,24 @@ namespace Falcom{
 		}
 	};
 	
+	class Bones{
+	private:
+		uint32_t count1 = 0;
+		uint32_t count2 = 0;
+		uint32_t count3 = 0;
+		ByteView bones;
+		ByteView names;
+	public:
+		void read( ByteViewReader& reader ){
+			count1 = reader.read32u();
+			count2 = reader.read32u();
+			count3 = reader.read32u();
+			bones = reader.read(count3 * 4 * 16);
+			names  = reader.read(count3 * 256);
+		}
+		
+	};
+	
 	struct Matrix{
 		float values[4][4];
 	};
@@ -90,6 +108,13 @@ namespace Falcom{
 		float unknown1, unknown2;
 		float u, v;
 	};
+	struct Vertex48{
+		float x, y, z;
+		float normal_x, normal_y, normal_z;
+		float unknown1, unknown2;
+		float u, v;
+		float unknown3, unknown4;
+	};
 	class Mesh{
 		public:
 			char name[256];
@@ -100,7 +125,9 @@ namespace Falcom{
 			std::vector<TextureV1> textures;
 			
 			std::vector<Vertex> vertices;
+			std::vector<Vertex48> vertices48;
 			std::vector<uint16_t> edges;
+			Bones bones;
 			
 			float unknown3[10];
 			uint32_t unknown11;
@@ -117,16 +144,23 @@ namespace Falcom{
 					reader.readVector( textures, texture_count );
 				
 				auto vertices_count = reader.read32u();
-				if (vertex_size != 40)
+				if (vertex_size != 40 && vertex_size != 48)
 				{
 					std::cout << "Does not yet support files with vertex_size == " << vertex_size << "\n";
 					throw std::runtime_error("Does not support vertex_size == " + std::to_string(vertex_size));
 					//std::exit(-1);
 				}
-				reader.readVector( vertices, vertices_count );
+				
+				if( vertex_size == 40 )
+					reader.readVector( vertices, vertices_count );
+				else
+					reader.readVector( vertices48, vertices_count );
 				
 				auto edge_count = reader.read32u();
 				reader.readVector( edges, edge_count );
+				
+				if( vertex_size == 48 )
+					bones.read(reader);
 				
 				reader.readData<float>( unknown3, 10 );
 				unknown11 = reader.read32u();
