@@ -20,12 +20,16 @@ seq:
     repeat: expr
     repeat-expr: frame_count
     
+  # Probably of all meshes
+  - id: min_pos
+    type: vec3
+  - id: max_pos
+    type: vec3
+  - id: avg_pos # Just the average of the min and max values apparently
+    type: vec3
   
-  - id: file_end_test
+  - id: unknown
     type: f4le
-    repeat: expr
-    repeat-expr: 10
-    
     
 types:
   vec3:
@@ -36,82 +40,7 @@ types:
         type: f4le
       - id: z
         type: f4le  
-  bone:
-    seq:
-      - id: name
-        type: str
-        size: 260
-        encoding: UTF-8
         
-      - id: matrix
-        type: f4le
-        repeat: expr
-        repeat-expr: 16
-        
-      - id: unknown1
-        type: u4le
-        
-      - id: unknown2
-        type: u1
-        
-      - id: unknown3
-        type: u4le
-        repeat: expr
-        repeat-expr: 8
-        
-      - id: count1
-        type: u4le
-        
-      - id: block1
-        type: bone_type1
-        repeat: expr
-        repeat-expr: count1
-        
-      - id: count2
-        type: u4le
-        
-      - id: block2
-        type: bone_type2
-        repeat: expr
-        repeat-expr: count2
-        
-      - id: count3
-        type: u4le
-        
-      - id: block3
-        type: bone_type1
-        repeat: expr
-        repeat-expr: count1
-        
-      - id: unknown4
-        type: u4le
-        
-      - id: unknown5
-        type: u2le
-        
-  bone_type1:
-    seq:
-      - id: unknown1
-        type: u4le
-      - id: unknown2
-        type: f4le
-      - id: unknown3
-        type: f4le
-      - id: unknown4
-        type: f4le
-        
-  bone_type2:
-    seq:
-      - id: unknown1
-        type: u4le
-      - id: unknown2
-        type: f4le
-      - id: unknown3
-        type: f4le
-      - id: unknown4
-        type: f4le
-      - id: unknown5
-        type: f4le
   header:
     seq:
       - id: unknown1
@@ -214,21 +143,13 @@ types:
         
   vertex2:
     seq:
-      - id: pos
-        type: vec3
-      - id: normal
-        type: vec3
+      - id: base
+        type: vertex
+        
       - id: unknown1
         type: f4le
+        
       - id: unknown2
-        type: f4le
-      - id: unknown3
-        type: f4le
-      - id: unknown4
-        type: f4le
-      - id: u
-        type: f4le
-      - id: v
         type: f4le
   bonedata1:
     seq:
@@ -267,7 +188,8 @@ types:
         encoding: UTF-8
         
       - id: magic
-        contents: [0xD2, 0x01, 0x00, 0x00] #Always 466 / 0x000001D2
+        size: 4
+        #contents: [0xD2, 0x01, 0x00, 0x00] #Always 466 / 0x000001D2
         
       - id: vertice_size
         type: u4le
@@ -332,17 +254,6 @@ types:
         repeat: expr
         repeat-expr: unknown7 * 26
        
-      # This doesn't seem to be correct 
-      #- id: block
-      #  size: 104
-      #  repeat: expr
-      #  repeat-expr: unknown6
-  unknown_type_test:
-    seq:
-      - id: unknown1
-        type: f4le
-        repeat: expr
-        repeat-expr: 26
         
   unknown_type2:
     seq:
@@ -375,8 +286,39 @@ types:
       - id: unknown5
         type: f4le
         
-  unknown_type:
+  submodel:
     seq:
+      - id: name
+        type: str
+        size: 260
+        encoding: UTF-8
+        
+      - id: matrix
+        type: f4le
+        repeat: expr
+        repeat-expr: 16
+        
+      - id: texture_count
+        type: u2le
+        if: _root.version >= 2
+        
+      - id: textures
+        type: texture
+        if: _root.version >= 2
+        repeat: expr
+        repeat-expr: texture_count
+        
+      - id: mesh_count
+        type: u2le
+        
+      - id: meshes
+        type: mesh
+        repeat: expr
+        repeat-expr: mesh_count
+      
+      - id: unknown1
+        type: u1
+        
       - id: start_a
         type: u4le
       - id: end_a
@@ -420,51 +362,6 @@ types:
         
       - id: unknown9
         type: u4le
-        
-  submodel:
-    seq:
-      - id: skipper
-        type: u1
-        repeat: until
-        repeat-until: _ == 70
-      - id: name
-        type: str
-        size: 259
-        encoding: UTF-8
-        
-      - id: matrix
-        type: f4le
-        repeat: expr
-        repeat-expr: 16
-        
-      - id: texture_count
-        type: u2le
-        if: _root.version >= 2
-        
-      - id: textures
-        type: texture
-        if: _root.version >= 2
-        repeat: expr
-        repeat-expr: texture_count
-        
-      - id: mesh_count
-        type: u2le
-        
-      - id: meshes
-        type: mesh
-        repeat: expr
-        repeat-expr: mesh_count
-      
-      - id: unknown1
-        type: u1
-        
-      - id: unknown_block1
-        type: unknown_type
-        if: unknown1 == 1
-        
-      - id: padding
-        size: 48
-        if: unknown1 == 0
         
       - id: count4
         type: u2le

@@ -29,7 +29,7 @@ Files from First and Second chapter works.
 
 This is done without searching for markers in the files which is the approch used in all other avaiable code. The structure is fully parsed though a lot about the format is still not understood. Some of the conditions might be incorrect.
 
-- First chapter: 949 of 952 files parses (99.7%)
+- First chapter: 951 of 952 files parses (99.9%)
 - Second chapter: 1598 of 1598 files parses (100%)
 - Third chapter: Unknown
 

@@ -202,6 +202,8 @@ namespace Falcom{
 			auto count3 = reader.read32u();
 			u5 = reader.read(count3 * 4*4);
 			auto unknown9 = reader.read32u();
+			if (unknown9 != 0)
+				std::cout << "Unknown9 is not 0\n";
 		}
 		
 	};
@@ -237,14 +239,7 @@ namespace Falcom{
 					meshes[i].read( reader, version );
 				
 				unknown1 = reader.read8u();
-				if (unknown1 == 1)
-				{
-					unknown_block1.read( reader );
-					//std::cout << "Warning: unknown1 == 1\n";
-				}
-				
-				if (unknown1 == 0)
-					random_padding = reader.read( 48 );
+				unknown_block1.read( reader );
 				
 				children_count = reader.read16u();
 				children.resize( children_count );

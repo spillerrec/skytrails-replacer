@@ -16,6 +16,8 @@ Falcom::Model::Model( Buffer data_1 ) : data( data_1 ){
 		version  = reader.read8u();
 		if( version >= 2 )
 			unknown1 = reader.read( 11*sizeof(float) );
+		if( version == 0 )
+			std::cout << "Version 0 is known not to work\n";
 	
 		children_count = reader.read16u();
 		frames.resize( children_count );
