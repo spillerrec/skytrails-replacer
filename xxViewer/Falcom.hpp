@@ -35,7 +35,7 @@ namespace Falcom{
 	};
 	
 	class Bones{
-	private:
+	public:
 		uint32_t count1 = 0;
 		uint32_t count2 = 0;
 		uint32_t count3 = 0;
@@ -104,15 +104,15 @@ namespace Falcom{
 	};
 	struct Vertex{
 		float x, y, z;
-		float normal_x, normal_y, normal_z;
-		float unknown1, unknown2;
+		float normal_x, normal_y, normal_z; //Probably
+		uint32_t unknown1, unknown2; // Usually 0xFFFFFFFF and 0x000000FF
 		float u, v;
 	};
 	struct Vertex48{
 		float x, y, z;
 		float normal_x, normal_y, normal_z;
-		float unknown1, unknown2;
-		float unknown3, unknown4;
+		float unknown3, unknown4; // Range -1.0 to 1.0
+		uint32_t unknown1, unknown2; // Usually 0xFFFFFFFF and 0x000000FF
 		float u, v;
 	};
 	class Mesh{
@@ -165,6 +165,7 @@ namespace Falcom{
 				reader.readData<float>( unknown3, 10 );
 				unknown11 = reader.read32u();
 				if (unknown11 > 0){
+					std::cout << "Mesh unknown: " << unknown11 << " vs. " << (edge_count / 3) << std::endl;
 					//std::cout << "Mesh unknown: " << unknown11 << std::endl;
 					reader.read(4 * unknown11 * 26);
 				}
@@ -176,6 +177,8 @@ namespace Falcom{
 						std::cout << "\t";
 					std::cout << "Mesh: " << name << " (" << unknown1 << ")\n";
 				}
+				if( bones.count3 > 0 )
+					std::cout << "Bone count: " << bones.count3 << std::endl;
 			}
 	};
 	

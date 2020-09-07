@@ -22,8 +22,7 @@ using namespace glm;
 #include <set>
 #include <vector>
 
-#include "glsl-fragment.h"
-#include "glsl-vertex.h"
+#include "glsl.h"
 
 static int error( const char* msg, int code = -1 ){
 	std::cout << "Error: " << msg << '\n';
@@ -86,22 +85,42 @@ GLuint LoadShaders(){
 	return ProgramID;
 }
 
+png::image< png::rgba_pixel > loadImage(std::string path){
+	/* Try loading AI upscaled images
+	try{
+		return png::image< png::rgba_pixel >{"images-upscaled/" + path};
+	}
+	catch(...)
+	{
+		std::cout << "Error, could not load upscaled texture: " << path.c_str() << std::endl;
+	}//*/
+	
+	return png::image< png::rgba_pixel >{"images/" + path};
+}
+
 class TextureHandler{
 	public:	
 		struct Texture{
 			std::string filename;
 			GLuint id = -1;
-			Texture(std::string filename) : filename(filename) {}
+			Texture(std::string filename) : filename(filename) {
+				auto pos = filename.find_last_of("/\\");
+				if (pos != std::string::npos)
+				{
+					std::cout << "Warning, removing garbage from filename: " << filename << std::endl;
+					this->filename = filename.substr(pos);
+				}
+			}
 		};
 		std::vector<Texture> textures;
 		
 		void loadAll(){
 			for( auto& tex : textures ){
 				tex.id = -1;
-				auto path = "images/" + tex.filename;
+				auto path = tex.filename;
 				path = path.substr(0, path.size()-4) + ".png";
 				try{
-					png::image< png::rgba_pixel > image(path);
+					auto image = loadImage(path);
 					
 					auto buffer = std::make_unique<uint8_t[]>(image.get_height()*image.get_width()*4);
 					for (png::uint_32 y = 0; y < image.get_height(); ++y)
@@ -153,6 +172,7 @@ class Model{
 		struct Vertex{
 			GLfloat x, y, z;
 			GLfloat u, v;
+			GLfloat w1, w2;
 			//Weights??
 			//Bones
 			//Normals ??
@@ -205,7 +225,8 @@ class Model{
 			createLookup();
 		}
 		
-		void addFaces( std::vector<GLfloat>& points, std::vector<GLfloat>& uvs ) const;
+		void addFaces( std::vector<GLfloat>& points, std::vector<GLfloat>& uvs, std::vector<GLfloat>& weights ) const;
+
 		
 		void find_boundaries(float& x_min, float& y_min, float& z_min, float& x_max, float& y_max, float& z_max){
 			for(auto v : vertices){
@@ -238,13 +259,16 @@ void Model::addMesh( const Falcom::Mesh& input ){
 		
 		vertices.reserve( vertices.size() + input.vertices.size() );
 		for( unsigned i=0; i < input.vertices.size(); i++ ){
+			auto& in = input.vertices[i];
 			Vertex v;
 			v.id = i;
-			v.x = input.vertices[i].x;
-			v.y = input.vertices[i].y;
-			v.z = input.vertices[i].z;
-			v.u = input.vertices[i].u;
-			v.v = input.vertices[i].v;
+			v.x = in.x;
+			v.y = in.y;
+			v.z = in.z;
+			v.u = in.u;
+			v.v = in.v;
+			v.w1 = 0.f;
+			v.w2 = 0.f;
 			vertices.emplace_back( v );
 		}
 	}
@@ -258,6 +282,9 @@ void Model::addMesh( const Falcom::Mesh& input ){
 			v.z = input.vertices48[i].z;
 			v.u = input.vertices48[i].u;
 			v.v = input.vertices48[i].v;
+			v.w1 = input.vertices48[i].unknown3;
+			v.w2 = input.vertices48[i].unknown4;
+			//std::cout << v.w1 << "  " << v.w2 << std::endl;
 			vertices.emplace_back( v );
 		}
 	}
@@ -275,8 +302,9 @@ void Model::createLookup(){
 	}
 }
 
-void Model::addFaces( std::vector<GLfloat>& points, std::vector<GLfloat>& uvs ) const{
+void Model::addFaces( std::vector<GLfloat>& points, std::vector<GLfloat>& uvs, std::vector<GLfloat>& weights ) const{
 	uvs.reserve( uvs.size() + faces.size() * 3 * 2 );
+	weights.reserve( weights.size() + faces.size() * 3 * 2 );
 	points.reserve( points.size() + faces.size() * 3 * 3 );
 	for( uint32_t i=0; i<edge_count; i++ ){
 		auto& face = faces[i + edge_start];
@@ -290,6 +318,8 @@ void Model::addFaces( std::vector<GLfloat>& points, std::vector<GLfloat>& uvs ) 
 					points.push_back( v.z );
 					uvs.push_back( v.u );
 					uvs.push_back( v.v );
+					weights.push_back( v.w1 );
+					weights.push_back( v.w2 );
 				};
 			addVertex( *vertex_a );
 			addVertex( *vertex_b );
@@ -466,7 +496,7 @@ int main( int argc, char* argv[] ){
 		return error( "Wrong amount of parameters" );
 	Falcom::Model xx( File( argv[1], "rb" ).readAll() );
 	xx.debug();
-	
+	/*
 	constexpr size_t stat_amount = 93;
 	for(size_t i=0; i<stat_amount; i++){
 		Statistics<float> stats;
@@ -488,7 +518,7 @@ int main( int argc, char* argv[] ){
 		stats1.evaluate("Texture.first");
 		stats2.evaluate("Texture.second");
 	}
-	
+	*/
 //	int count = 0, vertex_offset = 0;
 //	MtlHandler mtl_handler( "textures.mtl");
 //	for( auto& frame : xx.frames )
@@ -538,12 +568,13 @@ int main( int argc, char* argv[] ){
 	struct GlModel{
 		GLuint vertexbuffer;
 		GLuint uvsbuffer;
+		GLuint weightsbuffer;
 		GLuint texture_id;
 		
 		// An array of 3 vectors which represents 3 vertices
 		std::vector<GLfloat> vertices;
 		std::vector<GLfloat> uvs;
-		
+		std::vector<GLfloat> weights;
 	};
 	std::vector<GlModel> gl_models;
 	
@@ -563,7 +594,7 @@ int main( int argc, char* argv[] ){
 		model.offset(x.offset(), y.offset(), z.offset(), scale);
 	for( auto& model : models ){
 		GlModel m;
-		model.addFaces( m.vertices, m.uvs );
+		model.addFaces( m.vertices, m.uvs, m.weights );
 		
 		glGenBuffers(1, &m.vertexbuffer);
 		glBindBuffer(GL_ARRAY_BUFFER, m.vertexbuffer);
@@ -572,6 +603,10 @@ int main( int argc, char* argv[] ){
 		glGenBuffers(1, &m.uvsbuffer);
 		glBindBuffer(GL_ARRAY_BUFFER, m.uvsbuffer);
 		glBufferData(GL_ARRAY_BUFFER, m.uvs.size()*sizeof(GLfloat), m.uvs.data(), GL_STATIC_DRAW);
+		
+		glGenBuffers(2, &m.weightsbuffer);
+		glBindBuffer(GL_ARRAY_BUFFER, m.weightsbuffer);
+		glBufferData(GL_ARRAY_BUFFER, m.weights.size()*sizeof(GLfloat), m.weights.data(), GL_STATIC_DRAW);
 		
 		m.texture_id = model.material_index;
 		
@@ -702,6 +737,18 @@ int main( int argc, char* argv[] ){
 				(void*)0            // array buffer offset
 			);
 			
+			// 1rst attribute buffer : vertices
+			glEnableVertexAttribArray(2);
+			glBindBuffer(GL_ARRAY_BUFFER, m.weightsbuffer);
+			glVertexAttribPointer(
+				2,                  // attribute 0. No particular reason for 0, but must match the layout in the shader.
+				2,                  // size
+				GL_FLOAT,           // type
+				GL_FALSE,           // normalized?
+				0,                  // stride
+				(void*)0            // array buffer offset
+			);
+			
 			// Use our shader
 			glUseProgram(programID);
 			glUniformMatrix4fv(MatrixID, 1, GL_FALSE, &MVP[0][0]);
@@ -719,6 +766,7 @@ int main( int argc, char* argv[] ){
 			//glDrawArrays(GL_LINES, 0, m.vertices.size()); // Starting from vertex 0; 3 vertices total -> 1 triangle
 			glDisableVertexAttribArray(0);
 			glDisableVertexAttribArray(1);
+			glDisableVertexAttribArray(2);
 		}
 
 		// Swap buffers

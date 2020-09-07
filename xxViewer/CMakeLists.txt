@@ -1,15 +1,9 @@
 cmake_minimum_required(VERSION 3.0)
 project(trailsViewer)
 
-include(bin2h.cmake)
-
-bin2h(SOURCE_FILE "fragment.glsl" HEADER_FILE "glsl-fragment.h" VARIABLE_NAME "FRAGMENT_SRC")
-bin2h(SOURCE_FILE "vertex.glsl" HEADER_FILE "glsl-vertex.h" VARIABLE_NAME "VERTEX_SRC")
-
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall") # Turn on warnings
 
@@ -23,8 +17,6 @@ set(SOURCE_UTILS
 	utils/File.cpp
 	utils/StringView.cpp
 	)
-
-
 
 add_executable(trailsTester main-test.cpp Falcom.cpp ${SOURCE_UTILS})
 
