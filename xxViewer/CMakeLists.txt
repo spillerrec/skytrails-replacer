@@ -20,6 +20,8 @@ set(SOURCE_UTILS
 
 add_executable(trailsTester main-test.cpp Falcom.cpp ${SOURCE_UTILS})
 
+add_executable(trailsExtract main-extract-archive.cpp Falcom.cpp ${SOURCE_UTILS})
+
 add_executable(trailsViewer ${SOURCE_CORE} ${SOURCE_UTILS})
 
 
@@ -30,5 +32,7 @@ target_link_libraries(trailsViewer -lopengl32 -lglfw3 -lglew32 -lpng)
 # Enable C++14 features
 set_property(TARGET trailsViewer PROPERTY CXX_STANDARD 17)
 set_property(TARGET trailsViewer PROPERTY CXX_STANDARD_REQUIRED ON)
+set_property(TARGET trailsExtract PROPERTY CXX_STANDARD 17)
+set_property(TARGET trailsExtract PROPERTY CXX_STANDARD_REQUIRED ON)
 set_property(TARGET trailsTester PROPERTY CXX_STANDARD 17)
 set_property(TARGET trailsTester PROPERTY CXX_STANDARD_REQUIRED ON)

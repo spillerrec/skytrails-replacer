@@ -8,6 +8,23 @@
 #include <set>
 #include <vector>
 
+static inline void rtrim( std::string &s ){
+	auto not_space = []( auto ch ){ return !std::isspace(ch); };
+	s.erase(std::find_if(s.rbegin(), s.rend(), not_space).base(), s.end());
+}
+
+std::string Falcom::ArchiveEntry::fixedFilename(){
+	std::string a(std::begin(name), std::end(name));
+	std::string b(std::begin(extension), std::end(extension));
+	rtrim(a);
+	rtrim(b);
+	if( b == "_DS" )
+		b[0] = 'D';
+	else if( b == "_HD" )
+		b[0] = 'S';
+	return a + '.' + b;
+}
+
 Falcom::Model::Model( Buffer data_1 ) : data( data_1 ){
 	ByteViewReader reader( data );
 	

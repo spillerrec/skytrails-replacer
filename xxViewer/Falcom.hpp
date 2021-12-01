@@ -21,16 +21,20 @@ namespace Falcom{
 		uint32_t unknown2;
 		uint32_t timestamp;
 		uint32_t offset;
+		
+		std::string fixedFilename();
 	};
 	struct Archive{
-		char magic[10];
+		char magic[6];
 		uint16_t value; //0x001a
 		std::vector<ArchiveEntry> entries;
 		void read( ByteViewReader& reader ){
-			reader.readData<char>(magic, 10);
+			reader.readData<char>(magic, 6);
 			value = reader.read16u();
 			//TODO: Check validity
-			reader.readVector(entries, reader.read32u());
+			auto count = reader.read32u();
+			reader.read32u();
+			reader.readVector(entries, count);
 		}
 	};
 	

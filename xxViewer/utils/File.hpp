@@ -27,6 +27,8 @@ class FileOperations{
 		
 		auto tell(){ return ftell( handle ); }
 		
+		void flush(){ fflush( handle ); }
+		
 		Buffer read( size_t bytes ){
 			Buffer buf( bytes );
 			read( buf );
