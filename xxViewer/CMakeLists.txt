@@ -22,6 +22,8 @@ add_executable(trailsTester main-test.cpp Falcom.cpp ${SOURCE_UTILS})
 
 add_executable(trailsExtract main-extract-archive.cpp Falcom.cpp ${SOURCE_UTILS})
 
+add_executable(trailsCompress main-compress-archive.cpp Falcom.cpp ${SOURCE_UTILS})
+
 add_executable(trailsViewer ${SOURCE_CORE} ${SOURCE_UTILS})
 
 
@@ -34,5 +36,7 @@ set_property(TARGET trailsViewer PROPERTY CXX_STANDARD 17)
 set_property(TARGET trailsViewer PROPERTY CXX_STANDARD_REQUIRED ON)
 set_property(TARGET trailsExtract PROPERTY CXX_STANDARD 17)
 set_property(TARGET trailsExtract PROPERTY CXX_STANDARD_REQUIRED ON)
+set_property(TARGET trailsCompress PROPERTY CXX_STANDARD 17)
+set_property(TARGET trailsCompress PROPERTY CXX_STANDARD_REQUIRED ON)
 set_property(TARGET trailsTester PROPERTY CXX_STANDARD 17)
 set_property(TARGET trailsTester PROPERTY CXX_STANDARD_REQUIRED ON)

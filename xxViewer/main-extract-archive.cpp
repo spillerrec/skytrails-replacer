@@ -59,9 +59,8 @@ void decompress2(Stream& input, Stream& output, int64_t size){
 		// 0000.0000 No op
 		// 00fs.ssss Copy from input
 		// 010f.ssss Repeat byte
-		// 011?.???? Unused?
+		// 011s.ssss Lookback extension (following lookback)
 		// 1ssS.SSSS lookback
-		// 111s.ssss Lookback extension (following lookback)
 		
 		if( (action & 128) == 0 ){ // 0---.----
 			if( (action & 64) == 0 ){ // 00--.---- Copy from input (i.e. no compression)
@@ -90,11 +89,9 @@ void decompress2(Stream& input, Stream& output, int64_t size){
 		}
 		else{ // 1---.---- Copy from previous output (lookback)
 			int lookbacklength = ((action & 31) << 8) + input.read8(); // 1--X.XXXX
-			int length = ((action >> 5) & 3) + 4; // -XX-.---- Can never be less than 7?
-			if (length != 7)
-				std::cout << "Length: " << length << " " << (int)action << std::endl;
+			int length = ((action >> 5) & 3) + 4; // -XX-.---- 
 				
-			while( (input.peek() & 0xE0) == 96 ) //All top3 bits are set, 111-.----
+			while( (input.peek() & 0xE0) == 96 ) //Bits are set, 011-.----
 				length += input.read8() & 31;
 				
 			auto startPos = output.posNow() - lookbacklength;
@@ -195,13 +192,70 @@ void decompress1(StreamType& input, StreamType& output){
 }
 
 
+void extractFile(uint8_t* data, int64_t size, File& out_file){
+		
+	auto buffer_output_size = 0x4000000; // 64 MiB, should be KiB?
+	auto buffer_out = std::make_unique<uint8_t[]>( buffer_output_size );
+		
+	Stream in(data, size);
+	
+	while( !in.isEof() ){
+		Stream out(buffer_out.get(), buffer_output_size);
+		
+		auto unknown1 = in.read16(); // Size of first block?
+		auto unknown2 = in.peek();
+		//std::cout << "\n\n\nNew block with size " << unknown1 << std::endl;
+		
+		bool other_method = unknown2 != 0;
+		if (!other_method)
+			in.read8(); //hmm
+		
+		try{
+			if (other_method)
+				decompress2(in, out, unknown1);
+			else{
+				decompress1(in, out);
+			}
+		}
+		catch(std::exception& e)
+		{
+			out_file.write(ArrayView{buffer_out.get(), out.pos});
+			
+			std::cout << "Failing at :" << in.pos << std::endl;
+			throw std::runtime_error(e.what());
+		}
+		
+		out_file.write(ArrayView{buffer_out.get(), out.pos});
+		out_file.flush();
+		
+		if( in.isEof() )
+			break;
+		
+		auto remaining_blocks = in.read8();
+		//std::cout << "Remaining blocks" << (int)remaining_blocks << std::endl;
+		if( remaining_blocks == 0 )
+			break;
+	}
+	
+}
 
 
 int main( int argc, char* argv[] ){
 	std::string dir_file( argv[1] );
 	auto base_name = dir_file.substr(0, dir_file.size()-3);
+	auto ext = dir_file.substr(dir_file.size());
 	
 	auto data = File( dir_file.c_str(), "rb" ).readAll();
+	
+	if( ext != "DIR" && ext != "DAT" ){
+		// Just read a single file
+		File out_file((dir_file + ".decompressed").c_str(), "wb");
+		
+		extractFile(data.data(), data.size(), out_file);
+		
+		return 0;
+	}
+	
 	auto main = File( (base_name + "dat").c_str() );
 	ByteViewReader reader{data};
 	Falcom::Archive xx;
@@ -211,9 +265,6 @@ int main( int argc, char* argv[] ){
 	std::cout << "Value: " << xx.value << "\n";
 		
 	std::filesystem::create_directory( base_name );
-		
-	auto buffer_output_size = 0x4000000; // 64 MiB, should be KiB?
-	auto buffer_out = std::make_unique<uint8_t[]>( buffer_output_size );
 	
 	for( auto& entry : xx.entries ){
 		std::cout << std::string(entry.name) << " " 
@@ -238,50 +289,12 @@ int main( int argc, char* argv[] ){
 			//continue;
 		}
 		
-		Stream in(buf.data(), buf.size());
-		
 		
 		File((base_name + "/" + entry.fixedFilename() + ".raw").c_str(), "wb").write(buf);
 		File out_file((base_name + "/" + entry.fixedFilename()).c_str(), "wb");
 		
 		
-		
-		
-		while( !in.isEof() ){
-			Stream out(buffer_out.get(), buffer_output_size);
-			
-			auto unknown1 = in.read16(); // Size of first block?
-			auto unknown2 = in.peek();
-			
-			bool other_method = unknown2 != 0;
-			if (!other_method)
-				in.read8(); //hmm
-			
-			try{
-				if (other_method)
-					decompress2(in, out, unknown1);
-				else{
-					decompress1(in, out);
-				}
-			}
-			catch(std::exception& e)
-			{
-				out_file.write(ArrayView{buffer_out.get(), out.pos});
-				
-				std::cout << "Failing at :" << in.pos << std::endl;
-				throw std::runtime_error(e.what());
-			}
-			
-			out_file.write(ArrayView{buffer_out.get(), out.pos});
-			out_file.flush();
-			
-			if( in.isEof() )
-				break;
-			
-			auto remaining_blocks = in.read8();
-			if( remaining_blocks == 0 )
-				break;
-		}
+		extractFile(buf.data(), buf.size(), out_file);
 	}
 	return 0;
 }
